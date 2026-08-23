@@ -5,7 +5,6 @@ from homeassistant import config_entries
 from homeassistant.core import callback
 from homeassistant.const import CONF_PASSWORD, CONF_USERNAME
 
-from . import CONF_COMMAND_PIN, CONF_GPS_MAX_RADIUS_KM, DEFAULT_GPS_MAX_RADIUS_KM
 from .api import OpenCarWingsAPI, AuthenticationError, DEFAULT_API_BASE
 
 # Scan interval choices in minutes with friendly labels
@@ -27,6 +26,14 @@ DEFAULT_SCAN_INTERVAL_MIN = 15
 
 # Default API base URL
 DEFAULT_API_BASE_URL = DEFAULT_API_BASE
+
+from . import CONF_COMMAND_PIN, CONF_GPS_MAX_RADIUS_KM, DEFAULT_GPS_MAX_RADIUS_KM
+
+
+def _entry_title(username: str, api_base: str) -> str:
+    """Title an entry with its account and server."""
+    host = (api_base or "").split("://")[-1].strip("/") or DEFAULT_API_BASE_URL
+    return f"{username} - {host}"
 
 
 class OpenCARWINGSConfigFlow(config_entries.ConfigFlow, domain="ha_opencarwings"):
@@ -51,7 +58,7 @@ class OpenCARWINGSConfigFlow(config_entries.ConfigFlow, domain="ha_opencarwings"
                 errors["base"] = "unknown"
             else:
                 return self.async_create_entry(
-                    title=username,
+                    title=_entry_title(username, api_base),
                     data={
                         "username": username,
                         "access_token": tokens.get("access"),
@@ -121,11 +128,39 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
             pass
 
     async def async_step_init(self, user_input=None):
+        errors = {}
         if user_input is not None:
-            return self.async_create_entry(title="", data=user_input)
+            # A new password gets fresh tokens, which go in the entry data.
+            password = (user_input.pop(CONF_PASSWORD, "") or "").strip()
+            username = (user_input.pop(CONF_USERNAME, "") or "").strip()
+
+            if password:
+                api_base = user_input.get("api_base_url", DEFAULT_API_BASE_URL)
+                client = OpenCarWingsAPI(self.hass, base_url=api_base)
+                try:
+                    tokens = await client.async_obtain_token(username, password)
+                except AuthenticationError:
+                    errors["base"] = "auth"
+                except Exception:  # pragma: no cover - fallback
+                    errors["base"] = "unknown"
+                else:
+                    self.hass.config_entries.async_update_entry(
+                        self.config_entry,
+                        title=_entry_title(username, api_base),
+                        data={
+                            **self.config_entry.data,
+                            "username": username,
+                            "access_token": tokens.get("access"),
+                            "refresh_token": tokens.get("refresh"),
+                        },
+                    )
+
+            if not errors:
+                return self.async_create_entry(title="", data=user_input)
 
         current_scan = self.config_entry.options.get("scan_interval", self.config_entry.data.get("scan_interval", DEFAULT_SCAN_INTERVAL_MIN))
         current_api = self.config_entry.options.get("api_base_url", self.config_entry.data.get("api_base_url", DEFAULT_API_BASE_URL))
+        current_user = self.config_entry.data.get(CONF_USERNAME, "")
         current_pin = self.config_entry.options.get(CONF_COMMAND_PIN, self.config_entry.data.get(CONF_COMMAND_PIN, ""))
         current_radius = self.config_entry.options.get(
             CONF_GPS_MAX_RADIUS_KM,
@@ -154,9 +189,21 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
         except Exception:
             radius_selector = vol.Coerce(float)
 
+        try:
+            from homeassistant.helpers import selector
+
+            password_selector = selector.TextSelector(
+                selector.TextSelectorConfig(type=selector.TextSelectorType.PASSWORD)
+            )
+        except Exception:
+            password_selector = str
+
         return self.async_show_form(
             step_id="init",
+            errors=errors,
             data_schema=vol.Schema({
+                vol.Optional(CONF_USERNAME, default=current_user): str,
+                vol.Optional(CONF_PASSWORD, default=""): password_selector,
                 vol.Required("scan_interval", default=current_scan): scan_selector,
                 vol.Required("api_base_url", default=current_api): str,
                 vol.Optional(CONF_COMMAND_PIN, default=current_pin): str,
