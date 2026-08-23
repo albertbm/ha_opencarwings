@@ -190,6 +190,7 @@ class CarSensorSpec:
     transform: Optional[Callable[[Any], Any]] = None
     device_class: Optional[str] = None
     unit_of_measurement: Optional[str] = None
+    icon: Optional[str] = None
 
 
 def _to_int(v: Any) -> int | None:
@@ -212,6 +213,7 @@ CAR_SENSORS: list[CarSensorSpec] = [
         _ev_getter("range_acon"),
         transform=_to_float,
         unit_of_measurement="km",
+        icon="mdi:map-marker-distance",
     ),
     CarSensorSpec(
         "range_acoff",
@@ -219,18 +221,19 @@ CAR_SENSORS: list[CarSensorSpec] = [
         _ev_getter("range_acoff"),
         transform=_to_float,
         unit_of_measurement="km",
+        icon="mdi:map-marker-distance",
     ),
     CarSensorSpec("soc", "State of Charge", _ev_getter("soc"), transform=_round_1, device_class=SensorDeviceClass.BATTERY, unit_of_measurement=PERCENTAGE),
     CarSensorSpec("soc_display", "State of Charge Display", _ev_getter("soc_display"), transform=_round_1, device_class=SensorDeviceClass.BATTERY, unit_of_measurement=PERCENTAGE),
-    CarSensorSpec("charge_bars", "Charge Bars", _ev_getter("charge_bars")),
-    CarSensorSpec("plugged_in", "Charge Cable", _ev_getter("plugged_in"), transform=_plugged_to_str),
-    CarSensorSpec("charging", "Charging", _ev_getter("charging")),
-    CarSensorSpec("charge_finish", "Charge Finish", _ev_getter("charge_finish")),
-    CarSensorSpec("quick_charging", "Quick Charging", _ev_getter("quick_charging")),
-    CarSensorSpec("ac_status", "AC Status", _ev_getter("ac_status")),
-    CarSensorSpec("eco_mode", "Eco Mode", _ev_getter("eco_mode")),
-    CarSensorSpec("car_running", "Running", _ev_getter("car_running")),
-    CarSensorSpec("odometer", "Odometer", lambda car: car.get("odometer"), transform=_to_int, unit_of_measurement="km",),
+    CarSensorSpec("charge_bars", "Charge Bars", _ev_getter("charge_bars"), icon="mdi:battery-charging-medium"),
+    CarSensorSpec("plugged_in", "Charge Cable", _ev_getter("plugged_in"), transform=_plugged_to_str, icon="mdi:ev-plug-type1"),
+    CarSensorSpec("charging", "Charging", _ev_getter("charging"), icon="mdi:battery-charging"),
+    CarSensorSpec("charge_finish", "Charge Finish", _ev_getter("charge_finish"), icon="mdi:battery-check"),
+    CarSensorSpec("quick_charging", "Quick Charging", _ev_getter("quick_charging"), icon="mdi:ev-station"),
+    CarSensorSpec("ac_status", "AC Status", _ev_getter("ac_status"), icon="mdi:air-conditioner"),
+    CarSensorSpec("eco_mode", "Eco Mode", _ev_getter("eco_mode"), icon="mdi:leaf"),
+    CarSensorSpec("car_running", "Running", _ev_getter("car_running"), icon="mdi:car-electric"),
+    CarSensorSpec("odometer", "Odometer", lambda car: car.get("odometer"), transform=_to_int, unit_of_measurement="km", icon="mdi:counter"),
     CarSensorSpec(
         "full_chg_time",
         "Charge Time (3kW)",
@@ -238,6 +241,7 @@ CAR_SENSORS: list[CarSensorSpec] = [
         transform=_chg_minutes,
         device_class=SensorDeviceClass.DURATION,
         unit_of_measurement="min",
+        icon="mdi:timer-sand",
     ),
     CarSensorSpec(
         "limit_chg_time",
@@ -246,6 +250,7 @@ CAR_SENSORS: list[CarSensorSpec] = [
         transform=_chg_minutes,
         device_class=SensorDeviceClass.DURATION,
         unit_of_measurement="min",
+        icon="mdi:timer-sand",
     ),
     CarSensorSpec(
         "obc_6kw",
@@ -254,6 +259,7 @@ CAR_SENSORS: list[CarSensorSpec] = [
         transform=_chg_minutes,
         device_class=SensorDeviceClass.DURATION,
         unit_of_measurement="min",
+        icon="mdi:timer-sand",
     ),
 ]
 
@@ -267,6 +273,8 @@ class CarValueSensor(OpenCarwingsCarEntity, SensorEntity):
         self._attr_unique_id = f"ha_opencarwings_{spec.key}_{vin}"
         if spec.device_class:
             self._attr_device_class = spec.device_class
+        if spec.icon:
+            self._attr_icon = spec.icon
         if spec.unit_of_measurement:
             self._attr_native_unit_of_measurement = spec.unit_of_measurement
 
@@ -292,6 +300,8 @@ class CarValueSensor(OpenCarwingsCarEntity, SensorEntity):
 
 class CarStatusSensor(OpenCarwingsCarEntity, SensorEntity):
     """High-level status string for the car (charging, running, ac_on, idle)."""
+
+    _attr_icon = "mdi:car-info"
 
     def __init__(self, coordinator, entry_id: str, vin: str, seed_car: dict | None = None) -> None:
         super().__init__(coordinator, entry_id, vin, seed_car)
@@ -336,6 +346,7 @@ class CarStatusSensor(OpenCarwingsCarEntity, SensorEntity):
 class CarVINSensor(OpenCarwingsCarEntity, SensorEntity):
     """Per-car diagnostic sensor reporting the VIN."""
 
+    _attr_icon = "mdi:identifier"
     _attr_entity_category = EntityCategory.DIAGNOSTIC
 
     def __init__(self, coordinator, entry_id: str, vin: str, seed_car: dict | None = None) -> None:
@@ -356,6 +367,7 @@ class CarVINSensor(OpenCarwingsCarEntity, SensorEntity):
 class CarLastUpdatedSensor(OpenCarwingsCarEntity, SensorEntity):
     """Diagnostic: timestamp provided by the car (ev_info.last_updated or location or last_connection)."""
 
+    _attr_icon = "mdi:cloud-download-outline"
     _attr_entity_category = EntityCategory.DIAGNOSTIC
     _attr_device_class = SensorDeviceClass.TIMESTAMP
 
@@ -389,6 +401,7 @@ class CarLastUpdatedSensor(OpenCarwingsCarEntity, SensorEntity):
 class CarLastRequestedSensor(OpenCarwingsCarEntity, SensorEntity):
     """Diagnostic: last command sent to the car, not the polling clock."""
 
+    _attr_icon = "mdi:cloud-upload-outline"
     _attr_entity_category = EntityCategory.DIAGNOSTIC
     _attr_device_class = SensorDeviceClass.TIMESTAMP
 
@@ -428,6 +441,8 @@ class CarLastRequestedSensor(OpenCarwingsCarEntity, SensorEntity):
 
 class CarListSensor(SensorEntity):
     """Sensor that represents the list of cars for the account."""
+
+    _attr_icon = "mdi:car-multiple"
 
     def __init__(self, entry_id: str, cars: list[dict] | None = None, coordinator=None) -> None:
         self._entry_id = entry_id
