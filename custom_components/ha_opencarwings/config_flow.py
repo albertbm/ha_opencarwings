@@ -86,10 +86,18 @@ class OpenCARWINGSConfigFlow(config_entries.ConfigFlow, domain="ha_opencarwings"
 
         return self.async_show_form(step_id="user", data_schema=data_schema, errors=errors)
 
+    @staticmethod
+    @callback
+    def async_get_options_flow(config_entry):
+        return OptionsFlowHandler(config_entry)
+
 
 class OptionsFlowHandler(config_entries.OptionsFlow):
     def __init__(self, config_entry):
-        self.config_entry = config_entry
+        try:
+            self.config_entry = config_entry
+        except AttributeError:
+            pass
 
     async def async_step_init(self, user_input=None):
         if user_input is not None:
@@ -116,6 +124,3 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
             }),
         )
 
-
-async def async_get_options_flow(config_entry):
-    return OptionsFlowHandler(config_entry)
