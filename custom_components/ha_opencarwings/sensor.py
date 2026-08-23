@@ -22,6 +22,7 @@ except Exception:  # pragma: no cover
     class SensorDeviceClass:  # type: ignore
         BATTERY = "battery"
         TIMESTAMP = "timestamp"
+        DURATION = "duration"
 
 from . import DOMAIN
 
@@ -118,6 +119,24 @@ def _to_float(v: Any) -> float | None:
     except Exception:
         return None
 
+# Zero and the top values of the field mean "no estimate"; the server UI
+# draws them as "--:--".
+_CHG_TIME_UNAVAILABLE = {0, 2047, 4095}
+
+
+def _chg_minutes(v: Any) -> int | None:
+    """Charge time in minutes, or None when the car has no estimate."""
+    if v is None:
+        return None
+    try:
+        minutes = int(v)
+    except Exception:
+        return None
+    if minutes in _CHG_TIME_UNAVAILABLE or minutes < 1:
+        return None
+    return minutes
+
+
 def _round_1(v: Any) -> float | None:
     if v is None:
         return None
@@ -212,9 +231,30 @@ CAR_SENSORS: list[CarSensorSpec] = [
     CarSensorSpec("eco_mode", "Eco Mode", _ev_getter("eco_mode")),
     CarSensorSpec("car_running", "Running", _ev_getter("car_running")),
     CarSensorSpec("odometer", "Odometer", lambda car: car.get("odometer"), transform=_to_int, unit_of_measurement="km",),
-    CarSensorSpec("full_chg_time", "Full Charge Time", _ev_getter("full_chg_time")),
-    CarSensorSpec("limit_chg_time", "Limit Charge Time", _ev_getter("limit_chg_time")),
-    CarSensorSpec("obc_6kw", "OBC 6kW", _ev_getter("obc_6kw")),
+    CarSensorSpec(
+        "full_chg_time",
+        "Charge Time (3kW)",
+        _ev_getter("full_chg_time"),
+        transform=_chg_minutes,
+        device_class=SensorDeviceClass.DURATION,
+        unit_of_measurement="min",
+    ),
+    CarSensorSpec(
+        "limit_chg_time",
+        "Charge Time (1.4kW)",
+        _ev_getter("limit_chg_time"),
+        transform=_chg_minutes,
+        device_class=SensorDeviceClass.DURATION,
+        unit_of_measurement="min",
+    ),
+    CarSensorSpec(
+        "obc_6kw",
+        "Charge Time (6.6kW)",
+        _ev_getter("obc_6kw"),
+        transform=_chg_minutes,
+        device_class=SensorDeviceClass.DURATION,
+        unit_of_measurement="min",
+    ),
 ]
 
 
