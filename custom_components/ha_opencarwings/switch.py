@@ -73,6 +73,8 @@ async def async_setup_entry(hass, entry, async_add_entities):
 class CarACSwitch(SwitchEntity):
     """Represents the car A/C as a switch."""
 
+    _attr_icon = "mdi:air-conditioner"
+
     def __init__(self, entry_id: str, car: dict) -> None:
         self._entry_id = entry_id
         self._car = car
