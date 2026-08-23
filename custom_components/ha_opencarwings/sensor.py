@@ -75,10 +75,7 @@ def _to_float(v: Any) -> float | None:
     try:
         return float(v)
     except Exception:
-        try:
-            return float(s)
-        except Exception:
-            return None
+        return None
 
 def _round_1(v: Any) -> float | None:
     if v is None:
