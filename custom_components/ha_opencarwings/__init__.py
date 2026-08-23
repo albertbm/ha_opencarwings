@@ -12,7 +12,10 @@ from .api import OpenCarWingsAPI, AuthenticationError, RequestError
 
 DOMAIN = "ha_opencarwings"
 
+# Config entry keys shared by the config flow and the platforms.
 CONF_COMMAND_PIN = "command_pin"
+CONF_GPS_MAX_RADIUS_KM = "gps_max_radius_km"
+DEFAULT_GPS_MAX_RADIUS_KM = 0
 PLATFORMS = ["sensor", "switch", "device_tracker", "button"]
 
 # default: 15 minutes

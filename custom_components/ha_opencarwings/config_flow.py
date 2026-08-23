@@ -5,7 +5,7 @@ from homeassistant import config_entries
 from homeassistant.core import callback
 from homeassistant.const import CONF_PASSWORD, CONF_USERNAME
 
-from . import CONF_COMMAND_PIN
+from . import CONF_COMMAND_PIN, CONF_GPS_MAX_RADIUS_KM, DEFAULT_GPS_MAX_RADIUS_KM
 from .api import OpenCarWingsAPI, AuthenticationError, DEFAULT_API_BASE
 
 # Scan interval choices in minutes with friendly labels
@@ -60,6 +60,9 @@ class OpenCARWINGSConfigFlow(config_entries.ConfigFlow, domain="ha_opencarwings"
                         "scan_interval": user_input.get("scan_interval", DEFAULT_SCAN_INTERVAL_MIN),
                         "api_base_url": api_base,
                         CONF_COMMAND_PIN: user_input.get(CONF_COMMAND_PIN, ""),
+                        CONF_GPS_MAX_RADIUS_KM: user_input.get(
+                            CONF_GPS_MAX_RADIUS_KM, DEFAULT_GPS_MAX_RADIUS_KM
+                        ),
                     },
                 )
 
@@ -77,6 +80,18 @@ class OpenCARWINGSConfigFlow(config_entries.ConfigFlow, domain="ha_opencarwings"
             # selector not available in minimal test stubs — use numeric options
             scan_selector = vol.In(SCAN_INTERVAL_OPTIONS)
 
+        try:
+            from homeassistant.helpers import selector
+
+            radius_selector = selector.NumberSelector(
+                selector.NumberSelectorConfig(
+                    min=0, max=2000, step=5, unit_of_measurement="km",
+                    mode=selector.NumberSelectorMode.BOX,
+                )
+            )
+        except Exception:
+            radius_selector = vol.Coerce(float)
+
         data_schema = vol.Schema(
             {
                 vol.Required(CONF_USERNAME): str,
@@ -84,6 +99,9 @@ class OpenCARWINGSConfigFlow(config_entries.ConfigFlow, domain="ha_opencarwings"
                 vol.Required("scan_interval", default=DEFAULT_SCAN_INTERVAL_MIN): scan_selector,
                 vol.Required("api_base_url", default=DEFAULT_API_BASE_URL): str,
                 vol.Optional(CONF_COMMAND_PIN, default=""): str,
+                vol.Optional(
+                    CONF_GPS_MAX_RADIUS_KM, default=DEFAULT_GPS_MAX_RADIUS_KM
+                ): radius_selector,
             }
         )
 
@@ -109,6 +127,10 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
         current_scan = self.config_entry.options.get("scan_interval", self.config_entry.data.get("scan_interval", DEFAULT_SCAN_INTERVAL_MIN))
         current_api = self.config_entry.options.get("api_base_url", self.config_entry.data.get("api_base_url", DEFAULT_API_BASE_URL))
         current_pin = self.config_entry.options.get(CONF_COMMAND_PIN, self.config_entry.data.get(CONF_COMMAND_PIN, ""))
+        current_radius = self.config_entry.options.get(
+            CONF_GPS_MAX_RADIUS_KM,
+            self.config_entry.data.get(CONF_GPS_MAX_RADIUS_KM, DEFAULT_GPS_MAX_RADIUS_KM),
+        )
         try:
             from homeassistant.helpers import selector
 
@@ -120,12 +142,27 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
         except Exception:
             scan_selector = vol.In(SCAN_INTERVAL_OPTIONS)
 
+        try:
+            from homeassistant.helpers import selector
+
+            radius_selector = selector.NumberSelector(
+                selector.NumberSelectorConfig(
+                    min=0, max=2000, step=5, unit_of_measurement="km",
+                    mode=selector.NumberSelectorMode.BOX,
+                )
+            )
+        except Exception:
+            radius_selector = vol.Coerce(float)
+
         return self.async_show_form(
             step_id="init",
             data_schema=vol.Schema({
                 vol.Required("scan_interval", default=current_scan): scan_selector,
                 vol.Required("api_base_url", default=current_api): str,
                 vol.Optional(CONF_COMMAND_PIN, default=current_pin): str,
+                vol.Optional(
+                    CONF_GPS_MAX_RADIUS_KM, default=current_radius
+                ): radius_selector,
             }),
         )
 

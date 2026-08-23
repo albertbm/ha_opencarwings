@@ -1,7 +1,17 @@
 from __future__ import annotations
+
+import logging
+from math import asin, cos, radians, sin, sqrt
 from typing import Any
 
 from homeassistant.components.device_tracker import SourceType
+try:
+    from homeassistant.helpers.restore_state import RestoreEntity
+except Exception:  # pragma: no cover - tests running without hass stubs
+    class RestoreEntity:  # type: ignore
+        """Fallback base class used when RestoreEntity cannot be imported in tests."""
+        pass
+
 try:
     from homeassistant.components.device_tracker.config_entry import TrackerEntity
 except Exception:  # pragma: no cover - tests running without hass stubs
@@ -9,7 +19,24 @@ except Exception:  # pragma: no cover - tests running without hass stubs
         """Fallback base class used when TrackerEntity cannot be imported in tests."""
         pass
 
-from . import DOMAIN
+from . import CONF_GPS_MAX_RADIUS_KM, DEFAULT_GPS_MAX_RADIUS_KM, DOMAIN
+
+_LOGGER = logging.getLogger(__name__)
+
+# A head unit on the wrong map region, or with stale map data, can put the car
+# a long way from where it is while the TCU has it right. Fixes beyond the
+# configured radius from Home are dropped and the last good one held. Zero, the
+# default, accepts everything.
+
+
+def _haversine_km(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
+    """Great-circle distance in kilometres."""
+    r_lat1, r_lat2 = radians(lat1), radians(lat2)
+    d_lat = r_lat2 - r_lat1
+    d_lon = radians(lon2 - lon1)
+    a = sin(d_lat / 2) ** 2 + cos(r_lat1) * cos(r_lat2) * sin(d_lon / 2) ** 2
+    return 6371.0088 * 2 * asin(sqrt(a))
+
 
 async def async_setup_entry(hass, entry, async_add_entities):
     data = hass.data.get(DOMAIN, {}).get(entry.entry_id, {})
@@ -32,7 +59,7 @@ async def async_setup_entry(hass, entry, async_add_entities):
         ent.hass = hass
     async_add_entities(entities)
 
-class CarTracker(TrackerEntity):
+class CarTracker(TrackerEntity, RestoreEntity):
     def __init__(self, entry_id: str, car: dict, coordinator=None) -> None:
         self._entry_id = entry_id
         # Live values come from the coordinator on every read; this is only a
@@ -40,6 +67,8 @@ class CarTracker(TrackerEntity):
         self._seed_car = car or {}
         self._coordinator = coordinator
         self._vin = car.get("vin")
+        self._last_good: tuple[float, float] | None = None
+        self._last_reject: dict[str, Any] | None = None
 
     def _get_car(self) -> dict:
         """Merge seed data with the latest coordinator payload for this VIN."""
@@ -49,15 +78,6 @@ class CarTracker(TrackerEntity):
                 if isinstance(car, dict) and car.get("vin") == self._vin:
                     return {**self._seed_car, **car}
         return self._seed_car
-
-    async def async_added_to_hass(self) -> None:
-        parent = getattr(super(), "async_added_to_hass", None)
-        if parent is not None:
-            await parent()
-
-        add_listener = getattr(self._coordinator, "async_add_listener", None)
-        if add_listener is not None and hasattr(self, "async_on_remove"):
-            self.async_on_remove(add_listener(self.async_write_ha_state))
 
     @property
     def name(self) -> str:
@@ -73,7 +93,57 @@ class CarTracker(TrackerEntity):
     def source_type(self) -> SourceType:
         return SourceType.GPS
 
-    def _get_lat_lon(self):
+    async def async_added_to_hass(self) -> None:
+        """Seed the filter with the last good position from before a restart."""
+        parent = getattr(super(), "async_added_to_hass", None)
+        if parent is not None:
+            await parent()
+
+        add_listener = getattr(self._coordinator, "async_add_listener", None)
+        if add_listener is not None and hasattr(self, "async_on_remove"):
+            self.async_on_remove(add_listener(self.async_write_ha_state))
+
+        get_last_state = getattr(self, "async_get_last_state", None)
+        if get_last_state is None or self._last_good is not None:
+            return
+
+        last = await get_last_state()
+        if last is None:
+            return
+
+        lat = last.attributes.get("latitude")
+        lon = last.attributes.get("longitude")
+        if isinstance(lat, (int, float)) and isinstance(lon, (int, float)):
+            self._last_good = (float(lat), float(lon))
+            _LOGGER.debug("%s: restored last good position %s", self.name, self._last_good)
+
+    def _max_radius_km(self) -> float:
+        """Configured radius in km. Zero or less means do not filter."""
+        entries = getattr(getattr(self, "hass", None), "config_entries", None)
+        if entries is None:
+            return 0.0
+        entry = entries.async_get_entry(self._entry_id)
+        if entry is None:
+            return 0.0
+        value = entry.options.get(
+            CONF_GPS_MAX_RADIUS_KM,
+            entry.data.get(CONF_GPS_MAX_RADIUS_KM, DEFAULT_GPS_MAX_RADIUS_KM),
+        )
+        try:
+            return float(value)
+        except (TypeError, ValueError):
+            return 0.0
+
+    def _home(self) -> tuple[float, float] | None:
+        """Home Assistant's configured home position, or None."""
+        config = getattr(getattr(self, "hass", None), "config", None)
+        lat = getattr(config, "latitude", None)
+        lon = getattr(config, "longitude", None)
+        if isinstance(lat, (int, float)) and isinstance(lon, (int, float)):
+            return float(lat), float(lon)
+        return None
+
+    def _raw_lat_lon(self):
         # Look for various forms of last location in the car data.
         car = self._get_car()
         loc = car.get("last_location") or car.get("location")
@@ -96,6 +166,56 @@ class CarTracker(TrackerEntity):
                 except Exception:
                     return None, None
         return None, None
+
+    def _get_lat_lon(self):
+        lat, lon = self._raw_lat_lon()
+        if lat is None or lon is None:
+            return self._last_good or (None, None)
+
+        # Off the globe, or null island.
+        if not (-90.0 <= lat <= 90.0 and -180.0 <= lon <= 180.0) or (
+            abs(lat) < 1e-6 and abs(lon) < 1e-6
+        ):
+            self._reject(lat, lon, None)
+            return self._last_good or (None, None)
+
+        radius = self._max_radius_km()
+        home = self._home()
+        if radius <= 0 or home is None:
+            # Nothing to filter against: no radius set, or no home position.
+            self._last_good = (lat, lon)
+            self._last_reject = None
+            return self._last_good
+
+        distance = _haversine_km(lat, lon, home[0], home[1])
+
+        if distance <= radius:
+            self._last_good = (lat, lon)
+            self._last_reject = None
+            return self._last_good
+
+        self._reject(lat, lon, distance)
+        return self._last_good or (None, None)
+
+    def _reject(self, lat: float, lon: float, distance: float | None) -> None:
+        """Record a discarded fix; log it only the first time."""
+        reject = {
+            "latitude": lat,
+            "longitude": lon,
+            "distance_from_home_km": round(distance, 1) if distance is not None else None,
+        }
+        if reject != self._last_reject:
+            _LOGGER.warning(
+                "%s: discarding implausible GPS fix %.6f, %.6f (%s km from home, "
+                "limit %s km); holding last known good position %s",
+                self.name,
+                lat,
+                lon,
+                reject["distance_from_home_km"],
+                self._max_radius_km(),
+                self._last_good,
+            )
+        self._last_reject = reject
 
     @property
     def latitude(self) -> float | None:
@@ -138,7 +258,17 @@ class CarTracker(TrackerEntity):
             if raw_loc is not None:
                 raw_src = "ev_info.last_location"
 
-        return {**car, "last_location_raw": raw_loc, "last_location_source": raw_src}
+        # Force the filter to run so the diagnostics below reflect this update.
+        self._get_lat_lon()
+
+        return {
+            **car,
+            "last_location_raw": raw_loc,
+            "last_location_source": raw_src,
+            "gps_filter_max_radius_km": self._max_radius_km(),
+            "gps_filter_rejected": self._last_reject is not None,
+            "gps_filter_last_rejected_fix": self._last_reject,
+        }
 
     @property
     def device_info(self) -> dict[str, Any]:
