@@ -47,7 +47,8 @@ async def test_battery_and_location_and_switch_creation(monkeypatch):
 
     from custom_components.ha_opencarwings import switch as switch_mod
     await switch_mod.async_setup_entry(hass, entry, sw_add)
-    assert len(sw_added) == 1
+    # The A/C switch, plus one toggle per command pair.
+    assert len(sw_added) == 1 + len(switch_mod.COMMAND_SWITCHES)
     sw = sw_added[0]
     assert sw.unique_id == "ha_opencarwings_ac_VIN1"
 

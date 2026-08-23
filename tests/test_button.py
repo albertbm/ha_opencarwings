@@ -59,8 +59,8 @@ async def test_car_refresh_button_created_and_has_unique_id():
     entry = type("E", (), {"entry_id": "e1"})()
     await button_mod.async_setup_entry(hass, entry, add)
 
-    # there should be three buttons: per-entry + per-car refresh + per-car charge start
-    assert len(added) == 3
+    # Three fixed buttons, plus one per supported command.
+    assert len(added) == 3 + len(button_mod.COMMAND_BUTTONS)
 
     # find the car button
     car_btn = None

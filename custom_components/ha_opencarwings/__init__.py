@@ -11,6 +11,8 @@ from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, Upda
 from .api import OpenCarWingsAPI, AuthenticationError, RequestError
 
 DOMAIN = "ha_opencarwings"
+
+CONF_COMMAND_PIN = "command_pin"
 PLATFORMS = ["sensor", "switch", "device_tracker", "button"]
 
 # default: 15 minutes
