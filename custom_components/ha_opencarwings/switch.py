@@ -9,6 +9,8 @@ from homeassistant.components.switch import SwitchEntity
 
 from . import DOMAIN
 from .commands import (
+    CMD_AC_OFF,
+    CMD_AC_ON,
     CMD_HORN_LIGHTS,
     CMD_REMOTE_START,
     CMD_REMOTE_STOP,
@@ -100,29 +102,16 @@ class CarACSwitch(SwitchEntity):
         }
 
     async def async_turn_on(self, **kwargs) -> None:
-        """Turn A/C on by sending command_type 3 to `/api/command/{vin}/`."""
-        client = hass_client(self.hass, self._entry_id)
-        try:
-            await client.async_request("POST", f"/api/command/{self._vin}/", json={"vin": self._vin, "command_type": 3})
-            self._is_on = True
-        except Exception:  # pragma: no cover - network
-            _LOGGER.exception("Failed to turn A/C on for %s", self._vin)
-            raise
+        await async_send_command(
+            self.hass, self._entry_id, self._vin, CMD_AC_ON, "turn the A/C on"
+        )
+        self._is_on = True
 
     async def async_turn_off(self, **kwargs) -> None:
-        """Turn A/C off by sending command_type 4."""
-        client = hass_client(self.hass, self._entry_id)
-        try:
-            await client.async_request("POST", f"/api/command/{self._vin}/", json={"vin": self._vin, "command_type": 4})
-            self._is_on = False
-        except Exception:  # pragma: no cover - network
-            _LOGGER.exception("Failed to turn A/C off for %s", self._vin)
-            raise
-
-
-def hass_client(hass, entry_id: str):
-    """Helper to get the API client stored in hass.data."""
-    return hass.data[DOMAIN][entry_id]["client"]
+        await async_send_command(
+            self.hass, self._entry_id, self._vin, CMD_AC_OFF, "turn the A/C off"
+        )
+        self._is_on = False
 
 
 

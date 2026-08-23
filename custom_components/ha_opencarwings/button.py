@@ -15,12 +15,14 @@ except Exception:  # pragma: no cover - tests running without hass stubs
 
 from . import DOMAIN
 from .commands import (
+    CMD_CHARGE_START,
     CMD_CHARGE_START_80,
     CMD_DOOR_LOCK,
     CMD_DOOR_UNLOCK,
     CMD_HORN,
     CMD_LIGHTS,
     CMD_READ_CONFIG,
+    CMD_REFRESH,
     async_send_command,
     car_supports,
 )
@@ -140,34 +142,14 @@ class CarRefreshButton(ButtonEntity):
         }
 
     async def async_press(self) -> None:
-        """Press the button to send a 'Refresh data' command to the API for this car."""
-        client = hass_client(self.hass, self._entry_id)
-        try:
-            await client.async_request(
-                "POST",
-                f"/api/command/{self._vin}/",
-                json={"vin": self._vin, "command_type": 1},
-            )
-        except Exception:  # pragma: no cover - network
-            _LOGGER.exception("Failed to request car refresh for %s", self._vin)
-            raise
-
-        try:
-            coordinator = self.hass.data[DOMAIN][self._entry_id].get("coordinator")
-            if coordinator:
-                await coordinator.async_request_refresh()
-        except Exception:  # pragma: no cover - coordinator failure
-            _LOGGER.exception("Failed to trigger coordinator refresh after requesting car refresh for %s", self._vin)
+        await async_send_command(
+            self.hass, self._entry_id, self._vin, CMD_REFRESH, "refresh the car data"
+        )
 
     @property
     def extra_state_attributes(self) -> dict[str, Any]:
         return {"entry_id": self._entry_id, "vin": self._vin}
 
-
-
-def hass_client(hass, entry_id: str):
-    """Helper to get the API client stored in hass.data."""
-    return hass.data[DOMAIN][entry_id]["client"]
 
 
 class CarChargeStartButton(ButtonEntity):
@@ -198,24 +180,9 @@ class CarChargeStartButton(ButtonEntity):
         }
 
     async def async_press(self) -> None:
-        """Press the button to send a 'Charge start' command to the API for this car."""
-        client = hass_client(self.hass, self._entry_id)
-        try:
-            await client.async_request(
-                "POST",
-                f"/api/command/{self._vin}/",
-                json={"vin": self._vin, "command_type": 2},
-            )
-        except Exception:  # pragma: no cover - network
-            _LOGGER.exception("Failed to request charge start for %s", self._vin)
-            raise
-
-        try:
-            coordinator = self.hass.data[DOMAIN][self._entry_id].get("coordinator")
-            if coordinator:
-                await coordinator.async_request_refresh()
-        except Exception:  # pragma: no cover - coordinator failure
-            _LOGGER.exception("Failed to trigger coordinator refresh after requesting charge start for %s", self._vin)
+        await async_send_command(
+            self.hass, self._entry_id, self._vin, CMD_CHARGE_START, "start charging"
+        )
 
     @property
     def extra_state_attributes(self) -> dict[str, Any]:
