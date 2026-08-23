@@ -157,6 +157,10 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         # Don't abort setup; proceed to forward platforms so entity platforms can be set up
         pass
 
+    # Options otherwise sit unused until a restart. Not on the test stubs.
+    if hasattr(entry, "add_update_listener") and hasattr(entry, "async_on_unload"):
+        entry.async_on_unload(entry.add_update_listener(_async_update_options))
+
     # Forward setup to platforms
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
 
@@ -202,3 +206,8 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     # Remove stored data
     hass.data.get(DOMAIN, {}).pop(entry.entry_id, None)
     return unload_ok
+
+
+async def _async_update_options(hass: HomeAssistant, entry: ConfigEntry) -> None:
+    """Reload the entry so updated options take effect."""
+    await hass.config_entries.async_reload(entry.entry_id)
