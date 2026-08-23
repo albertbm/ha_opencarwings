@@ -21,6 +21,7 @@ try:
 except Exception:  # pragma: no cover
     class SensorDeviceClass:  # type: ignore
         BATTERY = "battery"
+        TIMESTAMP = "timestamp"
 
 from . import DOMAIN
 
@@ -44,6 +45,46 @@ def _parse_ts(value: str | None):
         return datetime.fromisoformat(value)
     except Exception:
         return None
+
+
+def _ensure_aware(dt: datetime | None) -> datetime | None:
+    """Return a timezone-aware datetime; the timestamp device class needs one."""
+    if not isinstance(dt, datetime):
+        return None
+    if dt.tzinfo is None:
+        return dt.replace(tzinfo=timezone.utc)
+    return dt
+
+
+def _relative_str(dt: datetime | None) -> str | None:
+    """Render a datetime as "5 minutes ago" / "in 2 hours" style text."""
+    dt = _ensure_aware(dt)
+    if dt is None:
+        return None
+
+    delta = (datetime.now(timezone.utc) - dt).total_seconds()
+    future = delta < 0
+    delta = abs(delta)
+
+    if delta < 45:
+        return "just now"
+
+    minute, hour, day, week = 60, 3600, 86400, 604800
+    for limit, size, unit in (
+        (90 * minute, minute, "minute"),
+        (36 * hour, hour, "hour"),
+        (14 * day, day, "day"),
+        (10 * week, week, "week"),
+    ):
+        if delta < limit:
+            count = round(delta / size)
+            break
+    else:
+        count = round(delta / (30 * day))
+        unit = "month"
+
+    plural = "" if count == 1 else "s"
+    return f"in {count} {unit}{plural}" if future else f"{count} {unit}{plural} ago"
 
 
 def _format_dt(dt: datetime | None) -> str | None:
@@ -276,6 +317,7 @@ class CarLastUpdatedSensor(OpenCarwingsCarEntity, SensorEntity):
     """Diagnostic: timestamp provided by the car (ev_info.last_updated or location or last_connection)."""
 
     _attr_entity_category = EntityCategory.DIAGNOSTIC
+    _attr_device_class = SensorDeviceClass.TIMESTAMP
 
     def __init__(self, coordinator, entry_id: str, vin: str, seed_car: dict | None = None) -> None:
         super().__init__(coordinator, entry_id, vin, seed_car)
@@ -287,22 +329,28 @@ class CarLastUpdatedSensor(OpenCarwingsCarEntity, SensorEntity):
         prefix = car.get("nickname") or car.get("model_name") or "Car"
         return f"{prefix} Last Updated"
 
-    @property
-    def native_value(self) -> str:
+    def _timestamp(self) -> datetime | None:
         car = self._get_car()
         ev = car.get("ev_info") or {}
         loc = car.get("location") or {}
         ts = ev.get("last_updated") or loc.get("last_updated") or car.get("last_connection")
-        parsed = _parse_ts(ts) if isinstance(ts, str) else None
-        if parsed:
-            return _format_dt(parsed) or parsed.isoformat()
-        return "unknown"
+        return _ensure_aware(_parse_ts(ts) if isinstance(ts, str) else None)
+
+    @property
+    def native_value(self) -> datetime | None:
+        return self._timestamp()
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any]:
+        dt = self._timestamp()
+        return {"relative": _relative_str(dt), "iso": _format_dt(dt)}
 
 
 class CarLastRequestedSensor(OpenCarwingsCarEntity, SensorEntity):
-    """Diagnostic: last time the integration requested data from the API."""
+    """Diagnostic: last command sent to the car, not the polling clock."""
 
     _attr_entity_category = EntityCategory.DIAGNOSTIC
+    _attr_device_class = SensorDeviceClass.TIMESTAMP
 
     def __init__(self, coordinator, entry_id: str, vin: str, seed_car: dict | None = None) -> None:
         super().__init__(coordinator, entry_id, vin, seed_car)
@@ -314,11 +362,24 @@ class CarLastRequestedSensor(OpenCarwingsCarEntity, SensorEntity):
         prefix = car.get("nickname") or car.get("model_name") or "Car"
         return f"{prefix} Last Requested"
 
+    def _timestamp(self) -> datetime | None:
+        ts = self._get_car().get("command_request_time")
+        return _ensure_aware(_parse_ts(ts) if isinstance(ts, str) else ts)
+
     @property
-    def native_value(self) -> str:
-        coord = self.coordinator
-        dt = getattr(coord, "last_update_time", None) if coord else None
-        return _format_dt(dt) or "unknown"
+    def native_value(self) -> datetime | None:
+        return self._timestamp()
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any]:
+        car = self._get_car()
+        dt = self._timestamp()
+        return {
+            "relative": _relative_str(dt),
+            "iso": _format_dt(dt),
+            "command": car.get("command_type_display"),
+            "result": car.get("command_result_display"),
+        }
 
 
 # -----------------------------

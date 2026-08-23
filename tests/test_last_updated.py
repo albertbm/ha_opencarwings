@@ -12,7 +12,9 @@ async def test_last_updated_sensor_reports_latest_timestamp_per_car():
     coordinator = type("C", (), {
         "last_update_time": datetime(2026, 1, 4, 14, 0, 0, tzinfo=timezone.utc), 
         "data": [
-            {"vin": "VIN1", "ev_info": {"last_updated": "2026-01-04T12:00:00Z"}, "location": {"last_updated": "2026-01-04T11:00:00Z"}},
+            {"vin": "VIN1", "ev_info": {"last_updated": "2026-01-04T12:00:00Z"}, "location": {"last_updated": "2026-01-04T11:00:00Z"},
+             "command_request_time": "2026-01-04T14:00:00Z", "command_type_display": "Refresh data",
+             "command_result_display": "Success"},
             {"vin": "VIN2", "ev_info": {"last_updated": latest}}
         ]
     })()
@@ -41,11 +43,14 @@ async def test_last_updated_sensor_reports_latest_timestamp_per_car():
     assert len(last1) == 1
     assert len(last2) == 1
     assert len(requested1) == 1
-    assert _val(last1[0]) == "2026-01-04T12:00:00Z"
-    assert _val(last2[0]) == latest
+    assert _val(last1[0]) == datetime(2026, 1, 4, 12, 0, 0, tzinfo=timezone.utc)
+    assert last1[0].extra_state_attributes["iso"] == "2026-01-04T12:00:00Z"
+    assert last2[0].extra_state_attributes["iso"] == latest
 
-    # The Last Requested sensor should reflect the coordinator's last_update_time
-    assert _val(requested1[0]) == "2026-01-04T14:00:00Z"
+    # Last Requested tracks commands sent to the car, not the polling clock
+    assert requested1[0].extra_state_attributes["iso"] == "2026-01-04T14:00:00Z"
+    assert requested1[0].extra_state_attributes["command"] == "Refresh data"
+    assert requested1[0].extra_state_attributes["result"] == "Success"
 
     # entity_category should be diagnostic (stubbed fallback allowed) and device_info present
     assert getattr(last1[0], "entity_category", None) is not None
@@ -69,7 +74,7 @@ async def test_last_requested_sensor_unknown_without_coordinator():
     assert len(requested) == 1
     def _val(e):
         return getattr(e, "native_value", getattr(e, "state", None))
-    assert _val(requested[0]) == "unknown"
+    assert _val(requested[0]) is None
 
 
 @pytest.mark.asyncio
@@ -103,5 +108,5 @@ async def test_last_updated_sensor_parses_timestamps_with_microseconds():
     def _val(e):
         return getattr(e, "native_value", getattr(e, "state", None))
     # The sensor should successfully parse and return the timestamp
-    assert _val(last1[0]) == "2026-01-05T00:16:10.419903Z"
-    assert _val(last1[0]) != "unknown"
+    assert last1[0].extra_state_attributes["iso"] == "2026-01-05T00:16:10.419903Z"
+    assert _val(last1[0]) is not None
