@@ -1,10 +1,10 @@
-"""Async client for OpenCARWINGS API (JWT auth).
+"""Async client for the OpenCARWINGS API.
 
-Provides methods to obtain and refresh JWT tokens and make authenticated requests.
+Every request carries an `Authorization: Token <key>` header. The key comes
+from your account settings on the server, not from Home Assistant.
 """
 from __future__ import annotations
 
-import asyncio
 import logging
 from typing import Optional
 
@@ -29,7 +29,7 @@ class RequestError(Exception):
 
 
 class OpenCarWingsAPI:
-    def __init__(self, hass, base_url: str = DEFAULT_API_BASE) -> None:
+    def __init__(self, hass, base_url: str = DEFAULT_API_BASE, api_key: str | None = None) -> None:
         self.hass = hass
         # Import the helper dynamically so tests that monkeypatch
         # `homeassistant.helpers.aiohttp_client.async_get_clientsession`
@@ -45,51 +45,16 @@ class OpenCarWingsAPI:
             self._session = None
 
         self._base = base_url.rstrip("/")
-        self._access: Optional[str] = None
-        self._refresh: Optional[str] = None
-        self._lock = asyncio.Lock()
+        self._api_key: Optional[str] = api_key
 
-    def set_tokens(self, access: str | None, refresh: str | None) -> None:
-        self._access = access
-        self._refresh = refresh
+    def set_api_key(self, api_key: str | None) -> None:
+        self._api_key = (api_key or "").strip() or None
 
-    async def async_obtain_token(self, username: str, password: str) -> dict:
-        url = f"{self._base}/api/token/obtain/"
-        payload = {"username": username, "password": password}
-
-        _LOGGER.debug("Requesting JWT token for user %s", username)
-        resp = await self._session.post(url, json=payload)
-        if resp.status not in (200, 201):
-            text = await resp.text()
-            _LOGGER.debug("Token obtain failed: %s %s", resp.status, text)
-            raise AuthenticationError("Invalid credentials or server error")
-
-        data = await resp.json()
-        self._access = data.get("access")
-        self._refresh = data.get("refresh")
-        if not self._access:
-            raise AuthenticationError("No access token received")
-        return data
-
-    async def async_refresh_token(self) -> str:
-        if not self._refresh:
-            raise AuthenticationError("No refresh token available")
-        url = f"{self._base}/api/token/refresh/"
-        payload = {"refresh": self._refresh}
-
-        _LOGGER.debug("Refreshing JWT token")
-        resp = await self._session.post(url, json=payload)
-        if resp.status not in (200, 201):
-            text = await resp.text()
-            _LOGGER.debug("Token refresh failed: %s %s", resp.status, text)
-            raise AuthenticationError("Refresh failed")
-
-        data = await resp.json()
-        access = data.get("access")
-        if not access:
-            raise AuthenticationError("No access token received on refresh")
-        self._access = access
-        return access
+    async def async_validate_api_key(self) -> list:
+        """List the cars to see whether the key works. Raises AuthenticationError if not."""
+        if not self._api_key:
+            raise AuthenticationError("No API key set")
+        return await self.async_get_cars()
 
     async def async_get_cars(self) -> list:
         """Retrieve a list of cars for the authenticated account.
@@ -98,7 +63,7 @@ class OpenCarWingsAPI:
         Raises RequestError or AuthenticationError on failures.
         """
         resp = await self.async_request("GET", "/api/car/")
-        if resp.status == 401:
+        if resp.status in (401, 403):
             raise AuthenticationError("Not authorized to fetch cars")
         if resp.status != 200:
             text = await resp.text()
@@ -113,26 +78,14 @@ class OpenCarWingsAPI:
         url = f"{self._base}{path if path.startswith('/') else '/' + path}"
         headers = kwargs.pop("headers", {}) or {}
 
-        if self._access:
-            headers["Authorization"] = f"Bearer {self._access}"
+        if self._api_key:
+            headers["Authorization"] = f"Token {self._api_key}"
 
         try:
             resp = await self._session.request(method, url, headers=headers, **kwargs)
         except Exception as err:  # pragma: no cover - network error
             _LOGGER.exception("Request to OpenCARWINGS failed")
             raise RequestError(err)
-
-        # If unauthorized, try to refresh once and retry
-        if resp.status == 401 and self._refresh:
-            _LOGGER.debug("Received 401, attempting token refresh")
-            async with self._lock:
-                try:
-                    await self.async_refresh_token()
-                except AuthenticationError:
-                    _LOGGER.debug("Refresh failed during retry")
-                    raise
-                headers["Authorization"] = f"Bearer {self._access}"
-                resp = await self._session.request(method, url, headers=headers, **kwargs)
 
         return resp
 
@@ -142,11 +95,10 @@ class OpenCarWingsAPI:
         if not vin:
             raise RequestError("VIN missing")
 
-        # TODO: if your spec says a different path, change ONLY this line:
         path = f"/api/car/{vin}/"
 
         resp = await self.async_request("GET", path)
-        if resp.status == 401:
+        if resp.status in (401, 403):
             raise AuthenticationError("Not authorized to fetch car detail")
         if resp.status != 200:
             text = await resp.text()

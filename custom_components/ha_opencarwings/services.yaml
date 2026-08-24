@@ -1,0 +1,15 @@
+refresh:
+  name: Refresh data
+  description: >-
+    Read fresh data from the OpenCARWINGS server. This never wakes the car,
+    it only re-reads what the server already knows. Use a command button to
+    make the car report in.
+  fields:
+    entry_id:
+      name: Account
+      description: The account to refresh. Leave empty to refresh every configured account.
+      required: false
+      example: 01M0R9FCSF072TJ5VXVJ9VAVS5
+      selector:
+        config_entry:
+          integration: ha_opencarwings

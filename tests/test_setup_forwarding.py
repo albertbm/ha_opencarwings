@@ -25,7 +25,7 @@ async def test_forward_entry_setups_and_unload(monkeypatch):
 
     hass = type("H", (), {"data": {}, "config_entries": config_entries})()
 
-    entry = type("E", (), {"entry_id": "e1", "data": {"access_token": "a", "refresh_token": "r"}, "title": "t"})()
+    entry = type("E", (), {"entry_id": "e1", "data": {"api_key": "k"}, "title": "t"})()
 
     # Monkeypatch the OpenCarWingsAPI to avoid real calls
     class MockClient:
@@ -39,7 +39,7 @@ async def test_forward_entry_setups_and_unload(monkeypatch):
             R.json = json
             return R
 
-        def set_tokens(self, access, refresh):
+        def set_api_key(self, api_key):
             pass
 
     monkeypatch.setattr(module, "OpenCarWingsAPI", MockClient)

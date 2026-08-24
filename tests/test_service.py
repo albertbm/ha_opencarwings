@@ -46,7 +46,7 @@ async def test_refresh_service_for_entry(monkeypatch):
         async def async_get_cars(self):
             return []
 
-        def set_tokens(self, access, refresh):
+        def set_api_key(self, api_key):
             return
 
     class FakeCoordinatorClass:
@@ -60,7 +60,7 @@ async def test_refresh_service_for_entry(monkeypatch):
     monkeypatch.setattr(init_mod, "OpenCarWingsAPI", FakeAPI)
     monkeypatch.setattr(init_mod, "DataUpdateCoordinator", FakeCoordinatorClass)
 
-    entry = type("E", (), {"entry_id": "e1", "title": "e1", "data": {}})()
+    entry = type("E", (), {"entry_id": "e1", "title": "e1", "data": {"api_key": "k"}})()
     # call setup which should register service
     await init_mod.async_setup_entry(hass, entry)
 
@@ -99,7 +99,7 @@ async def test_refresh_service_refreshes_all(monkeypatch):
         async def async_get_cars(self):
             return []
 
-        def set_tokens(self, access, refresh):
+        def set_api_key(self, api_key):
             return
 
     class FakeCoordinatorClass:
@@ -113,7 +113,7 @@ async def test_refresh_service_refreshes_all(monkeypatch):
     monkeypatch.setattr(init_mod, "OpenCarWingsAPI", FakeAPI)
     monkeypatch.setattr(init_mod, "DataUpdateCoordinator", FakeCoordinatorClass)
 
-    entry = type("E", (), {"entry_id": "e1", "title": "e1", "data": {}})()
+    entry = type("E", (), {"entry_id": "e1", "title": "e1", "data": {"api_key": "k"}})()
     await init_mod.async_setup_entry(hass, entry)
 
     await hass.services.async_call("ha_opencarwings", "refresh", {})

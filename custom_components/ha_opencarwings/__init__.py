@@ -8,6 +8,17 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 
+try:
+    from homeassistant.exceptions import ConfigEntryAuthFailed
+except ImportError:  # pragma: no cover - older stubs
+    class ConfigEntryAuthFailed(Exception):  # type: ignore
+        """Fallback used when the real exception cannot be imported."""
+
+try:
+    from homeassistant.const import CONF_API_KEY
+except ImportError:  # pragma: no cover - older stubs
+    CONF_API_KEY = "api_key"
+
 from .api import OpenCarWingsAPI, AuthenticationError, RequestError
 
 DOMAIN = "ha_opencarwings"
@@ -32,7 +43,12 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     opts = getattr(entry, "options", {}) or {}
     base_url = opts.get("api_base_url", entry.data.get("api_base_url"))
     client = OpenCarWingsAPI(hass, base_url=base_url) if base_url else OpenCarWingsAPI(hass)
-    client.set_tokens(entry.data.get("access_token"), entry.data.get("refresh_token"))
+
+    api_key = (entry.data.get(CONF_API_KEY) or "").strip()
+    if not api_key:
+        # Nothing to authenticate with: this entry predates the API key.
+        raise ConfigEntryAuthFailed("No API key stored for this account")
+    client.set_api_key(api_key)
 
     # Ensure base_url is accessible on the client instance (helps tests and some clients)
     if base_url:
@@ -125,9 +141,9 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
             raise RuntimeError("Client has no method to fetch cars")
 
-        except AuthenticationError:
-            # Let Home Assistant handle reauth via existing logic
-            raise
+        except AuthenticationError as err:
+            # Home Assistant turns this into a reauth flow.
+            raise ConfigEntryAuthFailed(err)
         except RequestError as err:
             raise UpdateFailed(err)
         except Exception as err:  # pragma: no cover - network or unexpected
@@ -151,10 +167,9 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     try:
         await coordinator.async_config_entry_first_refresh()
         hass.data[DOMAIN][entry.entry_id]["cars"] = coordinator.data or []
-    except AuthenticationError:
-        _LOGGER.warning("Tokens invalid or expired; requesting reauthentication")
-        hass.config_entries.async_start_reauth(entry.entry_id)
-        return False
+    except (ConfigEntryAuthFailed, AuthenticationError) as err:
+        _LOGGER.warning("API key rejected; requesting reauthentication")
+        raise ConfigEntryAuthFailed(err)
     except Exception:
         # Log the error but continue setup so platforms can use cached data if available
         _LOGGER.exception("Error while initializing OpenCARWINGS coordinator during setup")
@@ -201,6 +216,21 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             _LOGGER.debug("Could not register refresh service (services not available in hass stub)")
 
     _LOGGER.info("OpenCARWINGS setup complete for %s", entry.title)
+    return True
+
+
+async def async_migrate_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
+    """Strip the old sign-in so Home Assistant asks for an API key instead."""
+    if entry.version == 1:
+        data = {
+            k: v
+            for k, v in entry.data.items()
+            if k not in ("username", "password", "access_token", "refresh_token")
+        }
+        data.setdefault(CONF_API_KEY, "")
+        hass.config_entries.async_update_entry(entry, data=data, version=2)
+        _LOGGER.info("Migrated %s to API key auth; an API key is now required", entry.title)
+
     return True
 
 

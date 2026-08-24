@@ -3,30 +3,40 @@
     "step": {
       "user": {
         "title": "OpenCARWINGS",
-        "description": "Sign in with your OpenCARWINGS account.",
+        "description": "Connect with your OpenCARWINGS API key.",
         "data": {
-          "username": "Username",
-          "password": "Password",
+          "api_key": "API key",
           "scan_interval": "Update interval",
           "api_base_url": "Server address",
           "command_pin": "Command PIN",
           "gps_max_radius_km": "Ignore GPS fixes beyond"
         },
         "data_description": {
+          "api_key": "Sign in to the OpenCARWINGS server in a browser, open your account settings and copy the API key from there.",
           "scan_interval": "How often to read fresh data from the server. This never wakes the car. Only a command button does that.",
           "api_base_url": "Base URL of your OpenCARWINGS server. The public instance is https://opencarwings.viaaq.eu",
-          "command_pin": "Your OpenCARWINGS account's command PIN, set on the server, not in Home Assistant. The server refuses door lock and unlock, horn, lights and remote start without it. Leave blank if your account has no PIN set.",
-          "gps_max_radius_km": "Distance from Home, in km. Fixes further out than this are ignored and the last good one stays on the map. Useful when the head unit is set to the wrong map region or its map data is out of date, so it reports the car a long way from where it is. Set 0 to accept every fix.",
-          "username": "The account you sign in with on the OpenCARWINGS server."
+          "command_pin": "Your OpenCARWINGS account's PIN, set on the server. Without it the server refuses door lock and unlock, horn, lights and remote start. Leave blank if your account has no PIN.",
+          "gps_max_radius_km": "Distance from Home, in km. Fixes beyond it are ignored and the last good one stays on the map. Useful when the head unit has the wrong map region or stale map data and puts the car far from where it is. Set 0 to accept every fix."
+        }
+      },
+      "reauth_confirm": {
+        "title": "OpenCARWINGS API key",
+        "description": "This integration now signs in with an API key instead of a username and password. Open your account settings on the OpenCARWINGS server and copy the API key from there.",
+        "data": {
+          "api_key": "API key"
+        },
+        "data_description": {
+          "api_key": "The API key from your account settings on the OpenCARWINGS server."
         }
       }
     },
     "error": {
-      "auth": "Wrong username or password.",
+      "auth": "The server rejected that API key.",
       "unknown": "Could not reach the server."
     },
     "abort": {
-      "already_configured": "This account is already set up."
+      "already_configured": "This account is already set up.",
+      "reauth_successful": "The new API key works."
     }
   },
   "options": {
@@ -34,20 +44,34 @@
       "init": {
         "title": "OpenCARWINGS options",
         "data": {
+          "api_key": "API key",
           "scan_interval": "Update interval",
           "api_base_url": "Server address",
           "command_pin": "Command PIN",
-          "gps_max_radius_km": "Ignore GPS fixes beyond",
-          "username": "Username",
-          "password": "Password"
+          "gps_max_radius_km": "Ignore GPS fixes beyond"
         },
         "data_description": {
+          "api_key": "Only needed if your API key changed or you are switching accounts. Leave blank to keep the current one.",
           "scan_interval": "How often to read fresh data from the server. This never wakes the car. Only a command button does that.",
           "api_base_url": "Base URL of your OpenCARWINGS server. The public instance is https://opencarwings.viaaq.eu",
-          "command_pin": "Your OpenCARWINGS account's command PIN, set on the server, not in Home Assistant. The server refuses door lock and unlock, horn, lights and remote start without it. Leave blank if your account has no PIN set.",
-          "gps_max_radius_km": "Distance from Home, in km. Fixes further out than this are ignored and the last good one stays on the map. Useful when the head unit is set to the wrong map region or its map data is out of date, so it reports the car a long way from where it is. Set 0 to accept every fix.",
-          "password": "Only needed if your password changed. Leave blank to keep the current sign-in.",
-          "username": "Only change this if you are switching to a different account. Needs the password too."
+          "command_pin": "Your OpenCARWINGS account's PIN, set on the server. Without it the server refuses door lock and unlock, horn, lights and remote start. Leave blank if your account has no PIN.",
+          "gps_max_radius_km": "Distance from Home, in km. Fixes beyond it are ignored and the last good one stays on the map. Useful when the head unit has the wrong map region or stale map data and puts the car far from where it is. Set 0 to accept every fix."
+        }
+      }
+    },
+    "error": {
+      "auth": "The server rejected that API key.",
+      "unknown": "Could not reach the server."
+    }
+  },
+  "services": {
+    "refresh": {
+      "name": "Refresh data",
+      "description": "Read fresh data from the OpenCARWINGS server. This never wakes the car, it only re-reads what the server already knows. Use a command button to make the car report in.",
+      "fields": {
+        "entry_id": {
+          "name": "Account",
+          "description": "The account to refresh. Leave empty to refresh every configured account."
         }
       }
     }

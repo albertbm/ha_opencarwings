@@ -1,4 +1,5 @@
 CONF_USERNAME = "username"
 CONF_PASSWORD = "password"
+CONF_API_KEY = "api_key"
 ATTR_ATTRIBUTION = "attribution"
 PERCENTAGE = "%"

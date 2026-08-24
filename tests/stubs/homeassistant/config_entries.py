@@ -16,6 +16,9 @@ class ConfigFlow:
     def async_show_form(self, *, step_id: str, data_schema=None, errors=None):
         return {"type": "form", "step_id": step_id, "data_schema": data_schema, "errors": errors or {}}
 
+    def async_abort(self, *, reason: str):
+        return {"type": "abort", "reason": reason}
+
 
 class ConfigEntry:
     """Minimal stub representing a config entry."""

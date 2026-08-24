@@ -92,11 +92,15 @@ Choose one of the options below:
 
 Setup is done via the UI. You will need:
 
-- **Username** and **Password** for your OpenCARWINGS account
+- **API key** for your OpenCARWINGS account. Sign in to the server in a browser, open your account settings and copy the personal API key from there.
 - **Scan interval** (polling frequency, default: 15 minutes). The setup and options flows present a friendly select with labeled choices (for example: "1 minute", "15 minutes (default)", "1 hour", "1 day").
 - **API base URL** (optional — defaults to the known OpenCARWINGS endpoint)
 
-The integration obtains JWT tokens (access & refresh) during setup and refreshes tokens automatically.
+The key is sent as an `Authorization: Token <key>` header on every request. It never expires on its own, so there is nothing to refresh; resetting the key on the server invalidates the old one.
+
+### Upgrading from username and password
+
+Versions up to 0.6.0 signed in with a username and password and stored JWT tokens. On upgrade, existing entries are migrated and Home Assistant shows a **Reconfigure**/repair prompt asking for your API key. The old username and tokens are deleted once the new key is accepted.
 
 ---
 

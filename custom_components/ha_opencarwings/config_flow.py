@@ -3,7 +3,11 @@ from __future__ import annotations
 import voluptuous as vol
 from homeassistant import config_entries
 from homeassistant.core import callback
-from homeassistant.const import CONF_PASSWORD, CONF_USERNAME
+
+try:
+    from homeassistant.const import CONF_API_KEY
+except ImportError:  # pragma: no cover - older stubs
+    CONF_API_KEY = "api_key"
 
 from .api import OpenCarWingsAPI, AuthenticationError, DEFAULT_API_BASE
 
@@ -30,39 +34,83 @@ DEFAULT_API_BASE_URL = DEFAULT_API_BASE
 from . import CONF_COMMAND_PIN, CONF_GPS_MAX_RADIUS_KM, DEFAULT_GPS_MAX_RADIUS_KM
 
 
-def _entry_title(username: str, api_base: str) -> str:
-    """Title an entry with its account and server."""
+def _entry_title(api_base: str) -> str:
+    """Name an entry after the server it talks to."""
     host = (api_base or "").split("://")[-1].strip("/") or DEFAULT_API_BASE_URL
-    return f"{username} - {host}"
+    return f"OpenCARWINGS - {host}"
+
+
+def _scan_selector():
+    try:
+        from homeassistant.helpers import selector
+
+        return selector.SelectSelector(
+            selector.SelectSelectorConfig(
+                options=[{"value": v, "label": l} for v, l in SCAN_INTERVAL_CHOICES]
+            )
+        )
+    except Exception:
+        # selector not available in minimal test stubs — use numeric options
+        return vol.In(SCAN_INTERVAL_OPTIONS)
+
+
+def _radius_selector():
+    try:
+        from homeassistant.helpers import selector
+
+        return selector.NumberSelector(
+            selector.NumberSelectorConfig(
+                min=0, max=2000, step=5, unit_of_measurement="km",
+                mode=selector.NumberSelectorMode.BOX,
+            )
+        )
+    except Exception:
+        return vol.Coerce(float)
+
+
+def _secret_selector():
+    try:
+        from homeassistant.helpers import selector
+
+        return selector.TextSelector(
+            selector.TextSelectorConfig(type=selector.TextSelectorType.PASSWORD)
+        )
+    except Exception:
+        return str
+
+
+async def _async_check_api_key(hass, api_base: str, api_key: str) -> None:
+    """Ask the server whether this key works. Raises AuthenticationError if not."""
+    client = OpenCarWingsAPI(hass, base_url=api_base, api_key=api_key)
+    await client.async_validate_api_key()
 
 
 class OpenCARWINGSConfigFlow(config_entries.ConfigFlow, domain="ha_opencarwings"):
     """Config flow for OpenCARWINGS."""
 
-    VERSION = 1
+    VERSION = 2
+
+    def __init__(self) -> None:
+        self._reauth_entry = None
 
     async def async_step_user(self, user_input=None):
-        """Handle the initial step where user provides credentials."""
+        """Take an API key and check it before writing the entry."""
         errors = {}
         if user_input is not None:
-            username = user_input[CONF_USERNAME]
-            password = user_input[CONF_PASSWORD]
+            api_key = (user_input.get(CONF_API_KEY) or "").strip()
             api_base = user_input.get("api_base_url", DEFAULT_API_BASE_URL)
 
-            client = OpenCarWingsAPI(getattr(self, "hass", None), base_url=api_base)
             try:
-                tokens = await client.async_obtain_token(username, password)
+                await _async_check_api_key(getattr(self, "hass", None), api_base, api_key)
             except AuthenticationError:
                 errors["base"] = "auth"
             except Exception:  # pragma: no cover - fallback
                 errors["base"] = "unknown"
             else:
                 return self.async_create_entry(
-                    title=_entry_title(username, api_base),
+                    title=_entry_title(api_base),
                     data={
-                        "username": username,
-                        "access_token": tokens.get("access"),
-                        "refresh_token": tokens.get("refresh"),
+                        CONF_API_KEY: api_key,
                         # persist initial scan interval choice
                         "scan_interval": user_input.get("scan_interval", DEFAULT_SCAN_INTERVAL_MIN),
                         "api_base_url": api_base,
@@ -73,46 +121,59 @@ class OpenCARWINGSConfigFlow(config_entries.ConfigFlow, domain="ha_opencarwings"
                     },
                 )
 
-        # Prefer to show a pretty select when Home Assistant's selector helpers
-        # are available; fall back to a numeric choice list otherwise.
-        try:
-            from homeassistant.helpers import selector
-
-            scan_selector = selector.SelectSelector(
-                selector.SelectSelectorConfig(
-                    options=[{"value": v, "label": l} for v, l in SCAN_INTERVAL_CHOICES]
-                )
-            )
-        except Exception:
-            # selector not available in minimal test stubs — use numeric options
-            scan_selector = vol.In(SCAN_INTERVAL_OPTIONS)
-
-        try:
-            from homeassistant.helpers import selector
-
-            radius_selector = selector.NumberSelector(
-                selector.NumberSelectorConfig(
-                    min=0, max=2000, step=5, unit_of_measurement="km",
-                    mode=selector.NumberSelectorMode.BOX,
-                )
-            )
-        except Exception:
-            radius_selector = vol.Coerce(float)
-
         data_schema = vol.Schema(
             {
-                vol.Required(CONF_USERNAME): str,
-                vol.Required(CONF_PASSWORD): str,
-                vol.Required("scan_interval", default=DEFAULT_SCAN_INTERVAL_MIN): scan_selector,
+                vol.Required(CONF_API_KEY): _secret_selector(),
+                vol.Required("scan_interval", default=DEFAULT_SCAN_INTERVAL_MIN): _scan_selector(),
                 vol.Required("api_base_url", default=DEFAULT_API_BASE_URL): str,
                 vol.Optional(CONF_COMMAND_PIN, default=""): str,
                 vol.Optional(
                     CONF_GPS_MAX_RADIUS_KM, default=DEFAULT_GPS_MAX_RADIUS_KM
-                ): radius_selector,
+                ): _radius_selector(),
             }
         )
 
         return self.async_show_form(step_id="user", data_schema=data_schema, errors=errors)
+
+    async def async_step_reauth(self, entry_data=None):
+        """Entries set up with a username and password land here after upgrading."""
+        self._reauth_entry = self.hass.config_entries.async_get_entry(
+            self.context["entry_id"]
+        )
+        return await self.async_step_reauth_confirm()
+
+    async def async_step_reauth_confirm(self, user_input=None):
+        """Ask for an API key to replace the stored sign-in."""
+        errors = {}
+        entry = self._reauth_entry
+        api_base = (entry.options or {}).get(
+            "api_base_url", entry.data.get("api_base_url", DEFAULT_API_BASE_URL)
+        )
+
+        if user_input is not None:
+            api_key = (user_input.get(CONF_API_KEY) or "").strip()
+            try:
+                await _async_check_api_key(self.hass, api_base, api_key)
+            except AuthenticationError:
+                errors["base"] = "auth"
+            except Exception:  # pragma: no cover - fallback
+                errors["base"] = "unknown"
+            else:
+                data = {
+                    k: v
+                    for k, v in entry.data.items()
+                    if k not in ("username", "password", "access_token", "refresh_token")
+                }
+                data[CONF_API_KEY] = api_key
+                self.hass.config_entries.async_update_entry(entry, data=data)
+                await self.hass.config_entries.async_reload(entry.entry_id)
+                return self.async_abort(reason="reauth_successful")
+
+        return self.async_show_form(
+            step_id="reauth_confirm",
+            errors=errors,
+            data_schema=vol.Schema({vol.Required(CONF_API_KEY): _secret_selector()}),
+        )
 
     @staticmethod
     @callback
@@ -130,15 +191,13 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
     async def async_step_init(self, user_input=None):
         errors = {}
         if user_input is not None:
-            # A new password gets fresh tokens, which go in the entry data.
-            password = (user_input.pop(CONF_PASSWORD, "") or "").strip()
-            username = (user_input.pop(CONF_USERNAME, "") or "").strip()
+            # The key lives in the entry data, not the options, so it goes there.
+            api_key = (user_input.pop(CONF_API_KEY, "") or "").strip()
 
-            if password:
+            if api_key:
                 api_base = user_input.get("api_base_url", DEFAULT_API_BASE_URL)
-                client = OpenCarWingsAPI(self.hass, base_url=api_base)
                 try:
-                    tokens = await client.async_obtain_token(username, password)
+                    await _async_check_api_key(self.hass, api_base, api_key)
                 except AuthenticationError:
                     errors["base"] = "auth"
                 except Exception:  # pragma: no cover - fallback
@@ -146,13 +205,8 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
                 else:
                     self.hass.config_entries.async_update_entry(
                         self.config_entry,
-                        title=_entry_title(username, api_base),
-                        data={
-                            **self.config_entry.data,
-                            "username": username,
-                            "access_token": tokens.get("access"),
-                            "refresh_token": tokens.get("refresh"),
-                        },
+                        title=_entry_title(api_base),
+                        data={**self.config_entry.data, CONF_API_KEY: api_key},
                     )
 
             if not errors:
@@ -160,56 +214,22 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
 
         current_scan = self.config_entry.options.get("scan_interval", self.config_entry.data.get("scan_interval", DEFAULT_SCAN_INTERVAL_MIN))
         current_api = self.config_entry.options.get("api_base_url", self.config_entry.data.get("api_base_url", DEFAULT_API_BASE_URL))
-        current_user = self.config_entry.data.get(CONF_USERNAME, "")
         current_pin = self.config_entry.options.get(CONF_COMMAND_PIN, self.config_entry.data.get(CONF_COMMAND_PIN, ""))
         current_radius = self.config_entry.options.get(
             CONF_GPS_MAX_RADIUS_KM,
             self.config_entry.data.get(CONF_GPS_MAX_RADIUS_KM, DEFAULT_GPS_MAX_RADIUS_KM),
         )
-        try:
-            from homeassistant.helpers import selector
-
-            scan_selector = selector.SelectSelector(
-                selector.SelectSelectorConfig(
-                    options=[{"value": v, "label": l} for v, l in SCAN_INTERVAL_CHOICES]
-                )
-            )
-        except Exception:
-            scan_selector = vol.In(SCAN_INTERVAL_OPTIONS)
-
-        try:
-            from homeassistant.helpers import selector
-
-            radius_selector = selector.NumberSelector(
-                selector.NumberSelectorConfig(
-                    min=0, max=2000, step=5, unit_of_measurement="km",
-                    mode=selector.NumberSelectorMode.BOX,
-                )
-            )
-        except Exception:
-            radius_selector = vol.Coerce(float)
-
-        try:
-            from homeassistant.helpers import selector
-
-            password_selector = selector.TextSelector(
-                selector.TextSelectorConfig(type=selector.TextSelectorType.PASSWORD)
-            )
-        except Exception:
-            password_selector = str
 
         return self.async_show_form(
             step_id="init",
             errors=errors,
             data_schema=vol.Schema({
-                vol.Optional(CONF_USERNAME, default=current_user): str,
-                vol.Optional(CONF_PASSWORD, default=""): password_selector,
-                vol.Required("scan_interval", default=current_scan): scan_selector,
+                vol.Optional(CONF_API_KEY, default=""): _secret_selector(),
+                vol.Required("scan_interval", default=current_scan): _scan_selector(),
                 vol.Required("api_base_url", default=current_api): str,
                 vol.Optional(CONF_COMMAND_PIN, default=current_pin): str,
                 vol.Optional(
                     CONF_GPS_MAX_RADIUS_KM, default=current_radius
-                ): radius_selector,
+                ): _radius_selector(),
             }),
         )
-

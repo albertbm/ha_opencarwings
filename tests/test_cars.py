@@ -25,7 +25,7 @@ class MockClient:
     async def async_request(self, method, path, **kwargs):
         return MockResponse(200, [{"vin": "VIN1", "model_name": "Model A"}, {"vin": "VIN2", "model_name": "Model B"}])
 
-    def set_tokens(self, access, refresh):
+    def set_api_key(self, api_key):
         pass
 
 
@@ -59,7 +59,7 @@ async def test_setup_stores_cars(monkeypatch):
     # Monkeypatch OpenCarWingsAPI in the module to return our MockClient
     monkeypatch.setattr("custom_components.ha_opencarwings.OpenCarWingsAPI", lambda hass, base_url=None: MockClient(hass))
 
-    entry = type("E", (), {"entry_id": "e1", "data": {"access_token": "a", "refresh_token": "r", "api_base_url": "https://custom.example"}, "title": "t"})()
+    entry = type("E", (), {"entry_id": "e1", "data": {"api_key": "k", "api_base_url": "https://custom.example"}, "title": "t"})()
 
     ok = await module_init.async_setup_entry(hass, entry)
 

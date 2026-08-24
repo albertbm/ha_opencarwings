@@ -21,93 +21,97 @@ class MockResponse:
 class MockSession:
     def __init__(self):
         self.requests = []
-        self.posts = []
-        self._request_calls = 0
-
-    async def post(self, url, json=None, **kwargs):
-        if self.posts:
-            return self.posts.pop(0)
-        return MockResponse(404, {}, "not mocked")
+        self.calls = []
 
     async def request(self, method, url, headers=None, **kwargs):
+        self.calls.append((method, url, headers or {}))
         # return the next queued request response if present
         if self.requests:
             return self.requests.pop(0)
         return MockResponse(200, {"ok": True})
 
 
-@pytest.mark.asyncio
-async def test_obtain_token_success(monkeypatch):
-    mock_session = MockSession()
-    mock_session.posts.append(MockResponse(201, {"access": "a1", "refresh": "r1"}))
-
+def _client(monkeypatch, session):
     monkeypatch.setattr(
         "homeassistant.helpers.aiohttp_client.async_get_clientsession",
-        lambda hass: mock_session,
+        lambda hass: session,
     )
-
-    client = api.OpenCarWingsAPI(hass=None)
-    data = await client.async_obtain_token("user", "pass")
-
-    assert client._access == "a1"
-    assert client._refresh == "r1"
-    assert data["access"] == "a1"
+    return api.OpenCarWingsAPI(hass=None)
 
 
 @pytest.mark.asyncio
-async def test_obtain_token_failure(monkeypatch):
-    mock_session = MockSession()
-    mock_session.posts.append(MockResponse(401, {}, "bad creds"))
+async def test_api_key_goes_in_the_authorization_header(monkeypatch):
+    session = MockSession()
+    client = _client(monkeypatch, session)
+    client.set_api_key("abc123")
 
-    monkeypatch.setattr(
-        "homeassistant.helpers.aiohttp_client.async_get_clientsession",
-        lambda hass: mock_session,
-    )
+    await client.async_request("GET", "/api/car/")
 
-    client = api.OpenCarWingsAPI(hass=None)
+    assert session.calls[0][2]["Authorization"] == "Token abc123"
+
+
+@pytest.mark.asyncio
+async def test_request_without_key_sends_no_authorization(monkeypatch):
+    session = MockSession()
+    client = _client(monkeypatch, session)
+
+    await client.async_request("GET", "/api/car/")
+
+    assert "Authorization" not in session.calls[0][2]
+
+
+@pytest.mark.asyncio
+async def test_validate_api_key_success(monkeypatch):
+    session = MockSession()
+    session.requests.append(MockResponse(200, [{"vin": "VIN1"}]))
+    client = _client(monkeypatch, session)
+    client.set_api_key("abc123")
+
+    cars = await client.async_validate_api_key()
+
+    assert cars[0]["vin"] == "VIN1"
+
+
+@pytest.mark.asyncio
+async def test_validate_api_key_rejected(monkeypatch):
+    session = MockSession()
+    session.requests.append(MockResponse(401, {}, "unauthorized"))
+    client = _client(monkeypatch, session)
+    client.set_api_key("wrong")
+
     with pytest.raises(api.AuthenticationError):
-        await client.async_obtain_token("user", "wrong")
+        await client.async_validate_api_key()
 
 
 @pytest.mark.asyncio
-async def test_refresh_success(monkeypatch):
-    mock_session = MockSession()
-    mock_session.posts.append(MockResponse(200, {"access": "a2"}))
+async def test_validate_without_a_key_fails_before_any_request(monkeypatch):
+    session = MockSession()
+    client = _client(monkeypatch, session)
 
-    monkeypatch.setattr(
-        "homeassistant.helpers.aiohttp_client.async_get_clientsession",
-        lambda hass: mock_session,
-    )
+    with pytest.raises(api.AuthenticationError):
+        await client.async_validate_api_key()
 
-    client = api.OpenCarWingsAPI(hass=None)
-    client._refresh = "r1"
-    access = await client.async_refresh_token()
-
-    assert access == "a2"
-    assert client._access == "a2"
+    assert session.calls == []
 
 
 @pytest.mark.asyncio
-async def test_request_retries_on_401_and_refresh(monkeypatch):
-    mock_session = MockSession()
-    # initial request -> 401
-    mock_session.requests.append(MockResponse(401, {}, "unauth"))
-    # after refresh, successful request -> 200
-    mock_session.requests.append(MockResponse(200, {"ok": True}))
-    # refresh post returns new access
-    mock_session.posts.append(MockResponse(200, {"access": "a3"}))
+async def test_blank_key_is_treated_as_no_key(monkeypatch):
+    session = MockSession()
+    client = _client(monkeypatch, session)
+    client.set_api_key("   ")
 
-    monkeypatch.setattr(
-        "homeassistant.helpers.aiohttp_client.async_get_clientsession",
-        lambda hass: mock_session,
-    )
+    assert client._api_key is None
 
-    client = api.OpenCarWingsAPI(hass=None)
-    client._access = "old"
-    client._refresh = "r1"
 
-    resp = await client.async_request("GET", "/api/car/")
-    assert resp.status == 200
+@pytest.mark.asyncio
+async def test_get_car_by_vin_unauthorized(monkeypatch):
+    session = MockSession()
+    session.requests.append(MockResponse(403, {}, "forbidden"))
+    client = _client(monkeypatch, session)
+    client.set_api_key("abc123")
+
+    with pytest.raises(api.AuthenticationError):
+        await client.async_get_car_by_vin("VIN1")
 
 
 @pytest.mark.asyncio
@@ -116,13 +120,6 @@ async def test_request_network_error(monkeypatch):
         async def request(self, method, url, headers=None, **kwargs):
             raise Exception("network")
 
-    mock_session = BadSession()
-
-    monkeypatch.setattr(
-        "homeassistant.helpers.aiohttp_client.async_get_clientsession",
-        lambda hass: mock_session,
-    )
-
-    client = api.OpenCarWingsAPI(hass=None)
+    client = _client(monkeypatch, BadSession())
     with pytest.raises(api.RequestError):
         await client.async_request("GET", "/api/car/")
