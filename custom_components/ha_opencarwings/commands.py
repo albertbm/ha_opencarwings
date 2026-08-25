@@ -4,6 +4,7 @@ Command numbers match COMMAND_TYPES in the upstream server's db/models.py.
 """
 from __future__ import annotations
 
+import asyncio
 import logging
 from typing import Any
 
@@ -31,6 +32,26 @@ CMD_HORN_LIGHTS = 11
 CMD_STOP_HORN_LIGHTS = 12
 CMD_REMOTE_START = 13
 CMD_REMOTE_STOP = 14
+
+# command_result values from the server's COMMAND_RESULTS.
+RESULT_WAITING = -1
+RESULT_SUCCESS = 0
+RESULT_ERROR = 1
+RESULT_TIMEOUT = 2
+RESULT_AWAIT_RESPONSE = 3
+PENDING_RESULTS = (RESULT_WAITING, RESULT_AWAIT_RESPONSE)
+
+RESULT_NAMES = {
+    RESULT_SUCCESS: "success",
+    RESULT_ERROR: "error",
+    RESULT_TIMEOUT: "timeout",
+}
+
+# The server gives up on a command after five minutes.
+POLL_INTERVAL = 10
+POLL_TIMEOUT = 330
+
+EVENT_COMMAND_FINISHED = f"{DOMAIN}_command_finished"
 
 
 def car_supports(car: dict, command_type: int) -> bool:
@@ -76,11 +97,15 @@ async def async_send_command(
     vin: str,
     command_type: int,
     description: str,
+    command_payload: dict[str, Any] | None = None,
 ) -> None:
     """Send one command, raising HomeAssistantError with the server's reason."""
     client = hass.data[DOMAIN][entry_id]["client"]
 
     payload: dict[str, Any] = {"vin": vin, "command_type": command_type}
+    # Only A/C on and config accept one; other commands 400 with it.
+    if command_payload:
+        payload["command_payload"] = command_payload
     # Ignored by the server on commands that do not need it.
     pin = command_pin(hass, entry_id)
     if pin:
@@ -112,3 +137,81 @@ async def async_send_command(
             await coordinator.async_request_refresh()
     except Exception:  # pragma: no cover - coordinator failure
         _LOGGER.exception("Failed to refresh after %s for %s", description, vin)
+
+    _start_result_watch(hass, entry_id, vin, command_type, description)
+
+
+def _start_result_watch(hass, entry_id: str, vin: str, command_type: int, description: str) -> None:
+    """Follow the command until the car answers, without blocking the caller."""
+    create_task = getattr(hass, "async_create_task", None)
+    if create_task is None:  # pragma: no cover - minimal test stubs
+        return
+
+    watching = hass.data[DOMAIN].setdefault("_watching", set())
+    key = (entry_id, vin)
+    if key in watching:
+        return
+    watching.add(key)
+
+    create_task(
+        _async_watch_result(hass, entry_id, vin, command_type, description, key),
+        f"{DOMAIN} await {description} {vin}",
+    )
+
+
+async def _async_watch_result(
+    hass, entry_id: str, vin: str, command_type: int, description: str, key
+) -> None:
+    """Poll one car until its command resolves, then refresh the entities."""
+    data = hass.data.get(DOMAIN, {}).get(entry_id) or {}
+    client = data.get("client")
+    coordinator = data.get("coordinator")
+    watching = hass.data.get(DOMAIN, {}).get("_watching") or set()
+
+    result = None
+    waited = 0
+    attempts = max(1, int(POLL_TIMEOUT // POLL_INTERVAL)) if POLL_INTERVAL else 1
+    try:
+        for _ in range(attempts):
+            await asyncio.sleep(POLL_INTERVAL)
+            waited += POLL_INTERVAL
+            try:
+                car = await client.async_get_car_by_vin(vin)
+            except Exception as err:
+                _LOGGER.debug("Could not read %s while awaiting %s: %s", vin, description, err)
+                continue
+
+            if not isinstance(car, dict):
+                continue
+            result = car.get("command_result")
+            if car.get("command_requested") and result in PENDING_RESULTS:
+                continue
+            break
+        else:
+            result = RESULT_TIMEOUT
+
+        if result == RESULT_SUCCESS:
+            _LOGGER.info("Command to %s for %s succeeded after %ss", description, vin, waited)
+        else:
+            _LOGGER.warning(
+                "Command to %s for %s ended as %s after %ss",
+                description, vin, RESULT_NAMES.get(result, result), waited,
+            )
+
+        if coordinator:
+            await coordinator.async_request_refresh()
+
+        bus = getattr(hass, "bus", None)
+        if bus:
+            bus.async_fire(
+                EVENT_COMMAND_FINISHED,
+                {
+                    "entry_id": entry_id,
+                    "vin": vin,
+                    "command_type": command_type,
+                    "result": RESULT_NAMES.get(result, "unknown"),
+                    "seconds": waited,
+                },
+            )
+    finally:
+        watching.discard(key)

@@ -1,15 +1,58 @@
 refresh:
   name: Refresh data
   description: >-
-    Read fresh data from the OpenCARWINGS server. This never wakes the car,
-    it only re-reads what the server already knows. Use a command button to
-    make the car report in.
+    Re-read what the server already knows. This never wakes the car. Use a
+    command button for that.
   fields:
     entry_id:
       name: Account
       description: The account to refresh. Leave empty to refresh every configured account.
       required: false
       example: 01M0R9FCSF072TJ5VXVJ9VAVS5
+      selector:
+        config_entry:
+          integration: ha_opencarwings
+
+ac_on:
+  name: Turn on the A/C with a temperature
+  description: >-
+    Start preconditioning at a chosen temperature. Ficosa 2016 TCUs only;
+    older Continental TCUs reject the command outright.
+  fields:
+    temp:
+      name: Temperature
+      description: Target temperature, 0-31, in the unit below.
+      required: true
+      example: 21
+      selector:
+        number:
+          min: 0
+          max: 31
+          step: 1
+          mode: box
+    unit:
+      name: Unit
+      description: Which scale the car should read the value in.
+      required: false
+      default: celsius
+      selector:
+        select:
+          options:
+            - label: Celsius
+              value: celsius
+            - label: Fahrenheit
+              value: fahrenheit
+    vin:
+      name: VIN
+      description: Which car to precondition. Only needed when more than one car is set up.
+      required: false
+      example: SJNFAAZE0U6040222
+      selector:
+        text:
+    entry_id:
+      name: Account
+      description: The account the car belongs to. Leave empty unless you have more than one.
+      required: false
       selector:
         config_entry:
           integration: ha_opencarwings

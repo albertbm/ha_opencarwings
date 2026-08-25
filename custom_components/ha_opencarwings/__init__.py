@@ -9,6 +9,12 @@ from homeassistant.core import HomeAssistant
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 
 try:
+    from homeassistant.exceptions import ServiceValidationError
+except ImportError:  # pragma: no cover - older stubs
+    class ServiceValidationError(Exception):  # type: ignore
+        """Fallback used when the real exception cannot be imported."""
+
+try:
     from homeassistant.exceptions import ConfigEntryAuthFailed
 except ImportError:  # pragma: no cover - older stubs
     class ConfigEntryAuthFailed(Exception):  # type: ignore
@@ -177,6 +183,8 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         # Don't abort setup; proceed to forward platforms so entity platforms can be set up
         pass
 
+    _start_live_updates(hass, entry, client, coordinator, base_url, api_key)
+
     # Options otherwise sit unused until a restart. Not on the test stubs.
     if hasattr(entry, "add_update_listener") and hasattr(entry, "async_on_unload"):
         entry.async_on_unload(entry.add_update_listener(_async_update_options))
@@ -208,12 +216,28 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
                     if coord:
                         await coord.async_request_refresh()
 
+        async def _handle_ac_on(call):
+            """Turn the A/C on with a temperature setpoint."""
+            from .commands import CMD_AC_ON, async_send_command
+
+            data = call.data or {}
+            found_entry_id, vin = _resolve_car(hass, data.get("entry_id"), data.get("vin"))
+            await async_send_command(
+                hass,
+                found_entry_id,
+                vin,
+                CMD_AC_ON,
+                "turn the A/C on",
+                command_payload=_ac_payload(data.get("temp"), data.get("unit", "celsius")),
+            )
+
         try:
             hass.services.async_register(DOMAIN, "refresh", _handle_refresh)
+            hass.services.async_register(DOMAIN, "ac_on", _handle_ac_on)
             hass.data[DOMAIN]["_service_refresh_registered"] = True
         except Exception:
             # If hass.services isn't available in tests/stubs, ignore
-            _LOGGER.debug("Could not register refresh service (services not available in hass stub)")
+            _LOGGER.debug("Could not register services (services not available in hass stub)")
 
     _LOGGER.info("OpenCARWINGS setup complete for %s", entry.title)
     return True
@@ -234,12 +258,83 @@ async def async_migrate_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     return True
 
 
+def _start_live_updates(hass, entry, client, coordinator, base_url, api_key) -> None:
+    """Follow the server's push socket. Polling stays on as the safety net."""
+    if not hasattr(hass, "async_create_task"):  # pragma: no cover - test stubs
+        return
+
+    session = getattr(client, "_session", None)
+    if session is None or not hasattr(session, "ws_connect"):
+        _LOGGER.debug("No websocket-capable session; staying on polling only")
+        return
+
+    from .websocket import CarWingsSocket, DEFAULT_API_BASE_FALLBACK
+
+    socket = CarWingsSocket(
+        hass, session, base_url or DEFAULT_API_BASE_FALLBACK, api_key, coordinator
+    )
+    socket.start()
+    hass.data[DOMAIN][entry.entry_id]["socket"] = socket
+
+
+def _ac_payload(temp, unit) -> dict:
+    """Build the A/C payload. Send both keys or the server drops the setpoint."""
+    try:
+        temp = int(temp)
+    except (TypeError, ValueError):
+        raise ServiceValidationError("temp must be a whole number between 0 and 31")
+    if not 0 <= temp <= 31:
+        raise ServiceValidationError(f"temp must be between 0 and 31, got {temp}")
+
+    unit = str(unit or "celsius").lower()
+    if unit not in ("celsius", "fahrenheit"):
+        raise ServiceValidationError(f"unit must be celsius or fahrenheit, got {unit}")
+
+    return {"temp": temp, "unit": 0 if unit == "celsius" else 1}
+
+
+def _resolve_car(hass: HomeAssistant, entry_id: str | None, vin: str | None):
+    """Find the entry and VIN to command. With one car, neither is needed."""
+    cars_by_entry = {}
+    for eid, data in hass.data.get(DOMAIN, {}).items():
+        if not isinstance(data, dict):
+            continue
+        if entry_id and eid != entry_id:
+            continue
+        # cars is the setup-time snapshot; the coordinator has the live list.
+        coord = data.get("coordinator")
+        cars = getattr(coord, "data", None) or data.get("cars") or []
+        vins = [
+            str(c["vin"]) for c in cars if isinstance(c, dict) and c.get("vin")
+        ]
+        if vins:
+            cars_by_entry[eid] = vins
+
+    if not cars_by_entry:
+        raise ServiceValidationError("No OpenCARWINGS car is set up")
+
+    if vin:
+        for eid, vins in cars_by_entry.items():
+            if vin in vins:
+                return eid, vin
+        raise ServiceValidationError(f"No car with VIN {vin} is set up")
+
+    everything = [(eid, v) for eid, vins in cars_by_entry.items() for v in vins]
+    if len(everything) > 1:
+        raise ServiceValidationError(
+            "More than one car is set up, so the vin field is required"
+        )
+    return everything[0]
+
+
 async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     # Unload platforms
     unload_ok = await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
 
-    # Remove stored data
-    hass.data.get(DOMAIN, {}).pop(entry.entry_id, None)
+    stored = hass.data.get(DOMAIN, {}).pop(entry.entry_id, None) or {}
+    socket = stored.get("socket")
+    if socket:
+        await socket.stop()
     return unload_ok
 
 

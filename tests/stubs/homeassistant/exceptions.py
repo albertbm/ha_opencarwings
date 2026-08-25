@@ -8,3 +8,7 @@ class ConfigEntryError(HomeAssistantError):
 
 class ConfigEntryAuthFailed(ConfigEntryError):
     """Raised when an entry's credentials are no longer valid."""
+
+
+class ServiceValidationError(HomeAssistantError):
+    """Raised when a service call carries bad arguments."""

@@ -67,11 +67,33 @@
   "services": {
     "refresh": {
       "name": "Refresh data",
-      "description": "Read fresh data from the OpenCARWINGS server. This never wakes the car, it only re-reads what the server already knows. Use a command button to make the car report in.",
+      "description": "Re-read what the server already knows. This never wakes the car. Use a command button for that.",
       "fields": {
         "entry_id": {
           "name": "Account",
           "description": "The account to refresh. Leave empty to refresh every configured account."
+        }
+      }
+    },
+    "ac_on": {
+      "name": "Turn on the A/C with a temperature",
+      "description": "Start preconditioning at a chosen temperature. Ficosa 2016 TCUs only; older Continental TCUs reject the command outright.",
+      "fields": {
+        "temp": {
+          "name": "Temperature",
+          "description": "Target temperature, 0-31, in the unit below."
+        },
+        "unit": {
+          "name": "Unit",
+          "description": "Which scale the car should read the value in."
+        },
+        "vin": {
+          "name": "VIN",
+          "description": "Which car to precondition. Only needed when more than one car is set up."
+        },
+        "entry_id": {
+          "name": "Account",
+          "description": "The account the car belongs to. Leave empty unless you have more than one."
         }
       }
     }
