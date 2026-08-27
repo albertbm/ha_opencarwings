@@ -17,8 +17,8 @@ async def test_battery_and_location_and_switch_creation(monkeypatch):
     await sensor_mod.async_setup_entry(hass, entry, add)
 
     # Expect CarListSensor plus EV sensors (CarSensor removed as redundant)
-    # 1 list + (range_on, range_off, soc, soc_display, charge_bars, cable, charging, charge_finish, quick_charging, ac_status, eco_mode, car_running, odometer, full_chg_time, limit_chg_time, obc_6kw, status, last_updated, last_requested, vin) = 1 + 20 = 21
-    assert len(added) == 21
+    # 1 list + 13 per car. The booleans live on the binary_sensor platform.
+    assert len(added) == 14
 
     # new EV sensors
     def _val(e):
@@ -33,8 +33,12 @@ async def test_battery_and_location_and_switch_creation(monkeypatch):
     range_off = next(x for x in added if x.unique_id == "ha_opencarwings_range_acoff_VIN1")
     assert _val(range_off) == 140
 
-    plug = next(x for x in added if x.unique_id == "ha_opencarwings_plugged_in_VIN1")
-    assert _val(plug) == "plugged"
+    from custom_components.ha_opencarwings import binary_sensor as binary_mod
+
+    bin_added = []
+    await binary_mod.async_setup_entry(hass, entry, bin_added.extend)
+    plug = next(x for x in bin_added if x.unique_id == "ha_opencarwings_plugged_in_VIN1")
+    assert plug.is_on is True
 
     status = next(x for x in added if x.unique_id == "ha_opencarwings_status_VIN1")
     assert _val(status) == "idle"

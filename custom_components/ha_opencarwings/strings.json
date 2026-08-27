@@ -76,8 +76,8 @@
       }
     },
     "ac_on": {
-      "name": "Turn on the A/C with a temperature",
-      "description": "Start preconditioning at a chosen temperature. Ficosa 2016 TCUs only; older Continental TCUs reject the command outright.",
+      "name": "Turn on the climate at a temperature",
+      "description": "Start preconditioning at a chosen temperature. Ficosa 2016 TCUs only; older Continental TCUs reject it.",
       "fields": {
         "temp": {
           "name": "Temperature",
@@ -95,6 +95,119 @@
           "name": "Account",
           "description": "The account the car belongs to. Leave empty unless you have more than one."
         }
+      }
+    }
+  },
+  "entity": {
+    "sensor": {
+      "range_acon": {
+        "name": "Range (climate on)"
+      },
+      "range_acoff": {
+        "name": "Range (climate off)"
+      },
+      "soc": {
+        "name": "State of charge"
+      },
+      "soc_display": {
+        "name": "State of charge display"
+      },
+      "charge_bars": {
+        "name": "Charge bars"
+      },
+      "odometer": {
+        "name": "Odometer"
+      },
+      "full_chg_time": {
+        "name": "Charge time (3kW)"
+      },
+      "limit_chg_time": {
+        "name": "Charge time (1.4kW)"
+      },
+      "obc_6kw": {
+        "name": "Charge time (6.6kW)"
+      },
+      "status": {
+        "name": "Status"
+      },
+      "vin": {
+        "name": "VIN"
+      },
+      "last_updated": {
+        "name": "Last updated"
+      },
+      "last_requested": {
+        "name": "Last requested"
+      }
+    },
+    "binary_sensor": {
+      "plugged_in": {
+        "name": "Charge cable"
+      },
+      "charging": {
+        "name": "Charging"
+      },
+      "quick_charging": {
+        "name": "Quick charging"
+      },
+      "charge_finish": {
+        "name": "Charge finish"
+      },
+      "ac_status": {
+        "name": "Climate status"
+      },
+      "eco_mode": {
+        "name": "Eco mode"
+      },
+      "car_running": {
+        "name": "Running"
+      }
+    },
+    "switch": {
+      "climate": {
+        "name": "Climate"
+      },
+      "remote_start": {
+        "name": "Remote start"
+      },
+      "horn_lights": {
+        "name": "Horn and lights"
+      }
+    },
+    "button": {
+      "refresh": {
+        "name": "Request data refresh"
+      },
+      "charge_start": {
+        "name": "Charge start"
+      },
+      "lock": {
+        "name": "Lock"
+      },
+      "unlock": {
+        "name": "Unlock"
+      },
+      "charge_80": {
+        "name": "Charge to 80%"
+      },
+      "horn": {
+        "name": "Horn"
+      },
+      "lights": {
+        "name": "Lights"
+      },
+      "read_config": {
+        "name": "Read configuration"
+      }
+    },
+    "device_tracker": {
+      "tracker": {
+        "name": "Tracker"
+      }
+    },
+    "number": {
+      "requested_temp": {
+        "name": "Requested temperature"
       }
     }
   }

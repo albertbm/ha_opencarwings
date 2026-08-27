@@ -33,25 +33,23 @@ class CommandButtonSpec:
     """One remote command exposed as a button."""
 
     command_type: int
-    label: str
+    key: str
     # Phrase completing "Could not ..." in an error message.
     description: str
     icon: str
     diagnostic: bool = False
 
 
-# Commands 1 and 2 have their own classes below, the paired start/stop ones are
-# in switch.py, and 15 needs a config payload no plain button can supply.
-#
-# Lock and unlock are buttons rather than a lock entity: the TCU never reports
-# door state.
+# Commands 1 and 2 have their own classes below; the paired start/stop ones are
+# in switch.py, and 15 needs a payload no plain button can supply. Lock and
+# unlock stay buttons because the TCU never reports door state.
 COMMAND_BUTTONS: tuple[CommandButtonSpec, ...] = (
-    CommandButtonSpec(CMD_DOOR_LOCK, "Lock", "lock the doors", "mdi:car-door-lock"),
-    CommandButtonSpec(CMD_DOOR_UNLOCK, "Unlock", "unlock the doors", "mdi:car-door-lock-open"),
-    CommandButtonSpec(CMD_CHARGE_START_80, "Charge to 80%", "start charging to 80%", "mdi:battery-80"),
-    CommandButtonSpec(CMD_HORN, "Horn", "sound the horn", "mdi:bugle"),
-    CommandButtonSpec(CMD_LIGHTS, "Lights", "flash the lights", "mdi:car-light-high"),
-    CommandButtonSpec(CMD_READ_CONFIG, "Read Configuration", "read the car configuration", "mdi:cog-sync", diagnostic=True),
+    CommandButtonSpec(CMD_DOOR_LOCK, "lock", "lock the doors", "mdi:car-door-lock"),
+    CommandButtonSpec(CMD_DOOR_UNLOCK, "unlock", "unlock the doors", "mdi:car-door-lock-open"),
+    CommandButtonSpec(CMD_CHARGE_START_80, "charge_80", "start charging to 80%", "mdi:battery-80"),
+    CommandButtonSpec(CMD_HORN, "horn", "sound the horn", "mdi:bugle"),
+    CommandButtonSpec(CMD_LIGHTS, "lights", "flash the lights", "mdi:car-light-high"),
+    CommandButtonSpec(CMD_READ_CONFIG, "read_config", "read the car configuration", "mdi:cog-sync", diagnostic=True),
 )
 
 _LOGGER = logging.getLogger(__name__)
@@ -61,10 +59,8 @@ async def async_setup_entry(hass, entry, async_add_entities):
     data = hass.data.get(DOMAIN, {}).get(entry.entry_id, {})
     coordinator = data.get("coordinator")
 
-    # Create a single per-entry refresh button
     entities = [OpenCarWingsRefreshButton(entry.entry_id, coordinator=coordinator)]
 
-    # Create per-car API refresh buttons for each car
     cars = getattr(coordinator, "data", None) or data.get("cars", [])
     for car in cars:
         if not car.get("vin"):
@@ -76,7 +72,7 @@ async def async_setup_entry(hass, entry, async_add_entities):
             if car_supports(car, spec.command_type):
                 entities.append(CarCommandButton(entry.entry_id, car, spec, coordinator))
 
-    # Tests set hass on the entity for direct method calls
+    # Tests call entity methods directly, so set hass here.
     for ent in entities:
         ent.hass = hass
 
@@ -84,7 +80,7 @@ async def async_setup_entry(hass, entry, async_add_entities):
 
 
 class OpenCarWingsRefreshButton(ButtonEntity):
-    """Button that triggers a coordinator refresh when pressed."""
+    """Re-reads the server. Never contacts the car."""
 
     def __init__(self, entry_id: str, coordinator=None) -> None:
         self._entry_id = entry_id
@@ -99,7 +95,6 @@ class OpenCarWingsRefreshButton(ButtonEntity):
         return f"ha_opencarwings_refresh_{self._entry_id}"
 
     async def async_press(self) -> None:
-        """Press the button to force an immediate coordinator refresh."""
         if not self._coordinator:
             _LOGGER.warning("Refresh button pressed but coordinator is not available for %s", self._entry_id)
             return
@@ -115,18 +110,15 @@ class OpenCarWingsRefreshButton(ButtonEntity):
 
 
 class CarRefreshButton(ButtonEntity):
-    """Button that sends a 'Refresh data' command for a specific car."""
+    """Asks the car to upload fresh data."""
+
+    _attr_has_entity_name = True
+    _attr_translation_key = "refresh"
 
     def __init__(self, entry_id: str, car: dict) -> None:
         self._entry_id = entry_id
         self._car = car
         self._vin = car.get("vin")
-
-    @property
-    def name(self) -> str:
-        # Friendly label: prefer car nickname, then model name, then VIN
-        label = self._car.get("nickname") or self._car.get("model_name") or self._vin
-        return f"Request data refresh for {label}"
 
     @property
     def unique_id(self) -> str:
@@ -153,18 +145,15 @@ class CarRefreshButton(ButtonEntity):
 
 
 class CarChargeStartButton(ButtonEntity):
-    """Button that sends a 'Charge start' command for a specific car."""
+    """Tells the car to start charging."""
+
+    _attr_has_entity_name = True
+    _attr_translation_key = "charge_start"
 
     def __init__(self, entry_id: str, car: dict) -> None:
         self._entry_id = entry_id
         self._car = car
         self._vin = car.get("vin")
-
-    @property
-    def name(self) -> str:
-        # Friendly label: prefer car nickname, then model name, then VIN
-        label = self._car.get("nickname") or self._car.get("model_name") or self._vin
-        return f"Charge start for {label}"
 
     @property
     def unique_id(self) -> str:
@@ -189,7 +178,9 @@ class CarChargeStartButton(ButtonEntity):
         return {"entry_id": self._entry_id, "vin": self._vin}
 
 class CarCommandButton(ButtonEntity):
-    """Button that sends one remote command from COMMAND_BUTTONS."""
+    """One remote command, pressed once."""
+
+    _attr_has_entity_name = True
 
     def __init__(self, entry_id: str, car: dict, spec: CommandButtonSpec, coordinator=None) -> None:
         self._entry_id = entry_id
@@ -198,6 +189,7 @@ class CarCommandButton(ButtonEntity):
         self._vin = car.get("vin")
         self._spec = spec
         self._attr_icon = spec.icon
+        self._attr_translation_key = spec.key
         if spec.diagnostic:
             self._attr_entity_category = EntityCategory.DIAGNOSTIC
 
@@ -209,12 +201,6 @@ class CarCommandButton(ButtonEntity):
                 if isinstance(car, dict) and car.get("vin") == self._vin:
                     return {**self._seed_car, **car}
         return self._seed_car
-
-    @property
-    def name(self) -> str:
-        car = self._get_car()
-        prefix = car.get("nickname") or car.get("model_name") or "Car"
-        return f"{prefix} {self._spec.label}"
 
     @property
     def unique_id(self) -> str:

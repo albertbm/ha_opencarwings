@@ -40,6 +40,16 @@ class CoordinatorEntity:
     def __init__(self, coordinator):
         self.coordinator = coordinator
 
+    async def async_added_to_hass(self):
+        self.coordinator.async_add_listener(self._handle_coordinator_update)
+
+    def _handle_coordinator_update(self):
+        self.async_write_ha_state()
+
+    @property
+    def available(self):
+        return getattr(self.coordinator, "last_update_success", True)
+
     def async_write_ha_state(self):
         # no-op: tests call listener functions directly
         pass

@@ -33,19 +33,18 @@ DOMAIN = "ha_opencarwings"
 CONF_COMMAND_PIN = "command_pin"
 CONF_GPS_MAX_RADIUS_KM = "gps_max_radius_km"
 DEFAULT_GPS_MAX_RADIUS_KM = 0
-PLATFORMS = ["sensor", "switch", "device_tracker", "button"]
+PLATFORMS = ["sensor", "binary_sensor", "switch", "number", "device_tracker", "button"]
 
-# default: 15 minutes
 DEFAULT_SCAN_INTERVAL_MIN = 15
 
 _LOGGER = logging.getLogger(__name__)
 
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
-    """Set up the OpenCARWINGS integration from a config entry with a DataUpdateCoordinator."""
+    """Set up one OpenCARWINGS account."""
     hass.data.setdefault(DOMAIN, {})
 
-    # Respect configured API base URL (options override initial data)
+    # Options win over what setup wrote.
     opts = getattr(entry, "options", {}) or {}
     base_url = opts.get("api_base_url", entry.data.get("api_base_url"))
     client = OpenCarWingsAPI(hass, base_url=base_url) if base_url else OpenCarWingsAPI(hass)
@@ -56,20 +55,17 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         raise ConfigEntryAuthFailed("No API key stored for this account")
     client.set_api_key(api_key)
 
-    # Ensure base_url is accessible on the client instance (helps tests and some clients)
     if base_url:
-        # set both common attribute names
         try:
             setattr(client, "base_url", base_url)
             setattr(client, "_base", base_url)
         except Exception:
             pass
 
-    # Store client in hass.data under the entry id
     hass.data[DOMAIN][entry.entry_id] = {"client": client}
 
     async def _enrich_cars_with_details(cars: list) -> list:
-        """Enrich lite car objects (from /api/car/) with detail fetched by VIN."""
+        """Fill in the fields the car list leaves out."""
         if not isinstance(cars, list) or not cars:
             return cars
         if not hasattr(client, "async_get_car_by_vin"):
@@ -103,7 +99,6 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             vin = str(vin)
             by_vin[vin] = {**by_vin.get(vin, {}), **d}
 
-        # Preserve list order
         out: list[dict] = []
         for c in cars:
             if isinstance(c, dict) and c.get("vin"):
@@ -114,25 +109,23 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         return out
 
     async def _async_update_data():
-        """Fetch data from API."""
+        """Read every car on this account."""
         from datetime import datetime, timezone
 
         try:
-            # Prefer dedicated helper if available
             if hasattr(client, "async_get_cars"):
                 cars = await client.async_get_cars()
 
-                # Try to enrich with detail endpoint (to get odometer, versions, etc.)
+                # The list endpoint omits odometer and versions.
                 try:
                     cars = await _enrich_cars_with_details(cars)
                 except Exception as err:
                     _LOGGER.debug("Could not enrich car list with details: %s", err)
 
-                # Track the last successful update time for CarLastRequestedSensor
                 coordinator.last_update_time = datetime.now(timezone.utc)
                 return cars
 
-            # Fallback to raw request-based client (used in tests)
+            # The raw client, used by the tests.
             if hasattr(client, "async_request"):
                 resp = await client.async_request("GET", "/api/car/")
                 result = await resp.json()
@@ -155,7 +148,6 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         except Exception as err:  # pragma: no cover - network or unexpected
             raise UpdateFailed(err)
 
-    # Determine scan interval from options (or fallback to default)
     scan_min = opts.get("scan_interval", entry.data.get("scan_interval", DEFAULT_SCAN_INTERVAL_MIN))
 
     coordinator = DataUpdateCoordinator(
@@ -166,10 +158,8 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         update_interval=timedelta(minutes=scan_min),
     )
 
-    # store coordinator
     hass.data[DOMAIN][entry.entry_id]["coordinator"] = coordinator
 
-    # Do initial refresh to populate data
     try:
         await coordinator.async_config_entry_first_refresh()
         hass.data[DOMAIN][entry.entry_id]["cars"] = coordinator.data or []
@@ -177,10 +167,9 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         _LOGGER.warning("API key rejected; requesting reauthentication")
         raise ConfigEntryAuthFailed(err)
     except Exception:
-        # Log the error but continue setup so platforms can use cached data if available
+        # Carry on so the platforms can fall back to cached data.
         _LOGGER.exception("Error while initializing OpenCARWINGS coordinator during setup")
         hass.data[DOMAIN][entry.entry_id]["cars"] = hass.data[DOMAIN][entry.entry_id].get("cars", [])
-        # Don't abort setup; proceed to forward platforms so entity platforms can be set up
         pass
 
     _start_live_updates(hass, entry, client, coordinator, base_url, api_key)
@@ -189,14 +178,12 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     if hasattr(entry, "add_update_listener") and hasattr(entry, "async_on_unload"):
         entry.async_on_unload(entry.add_update_listener(_async_update_options))
 
-    # Forward setup to platforms
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
 
-    # Register integration service to allow manual refresh via service call
-    # Register only once per hass instance
+    # Once per hass, not once per entry.
     if not hass.data[DOMAIN].get("_service_refresh_registered"):
         async def _handle_refresh(call):
-            """Handle service call to refresh OpenCARWINGS data."""
+            """Re-read the server for one account, or all of them."""
             entry_id = (call.data or {}).get("entry_id") if call else None
             if entry_id:
                 data = hass.data.get(DOMAIN, {}).get(entry_id)
@@ -207,9 +194,8 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
                 if coord:
                     await coord.async_request_refresh()
             else:
-                # refresh all coordinators
                 for d in hass.data.get(DOMAIN, {}).values():
-                    # skip non-dict sentinel values stored in hass.data (like flags)
+                    # hass.data also holds plain flags.
                     if not isinstance(d, dict):
                         continue
                     coord = d.get("coordinator")
@@ -217,7 +203,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
                         await coord.async_request_refresh()
 
         async def _handle_ac_on(call):
-            """Turn the A/C on with a temperature setpoint."""
+            """Turn the climate on at a temperature."""
             from .commands import CMD_AC_ON, async_send_command
 
             data = call.data or {}
@@ -227,7 +213,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
                 found_entry_id,
                 vin,
                 CMD_AC_ON,
-                "turn the A/C on",
+                "turn the climate on",
                 command_payload=_ac_payload(data.get("temp"), data.get("unit", "celsius")),
             )
 
@@ -236,7 +222,6 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             hass.services.async_register(DOMAIN, "ac_on", _handle_ac_on)
             hass.data[DOMAIN]["_service_refresh_registered"] = True
         except Exception:
-            # If hass.services isn't available in tests/stubs, ignore
             _LOGGER.debug("Could not register services (services not available in hass stub)")
 
     _LOGGER.info("OpenCARWINGS setup complete for %s", entry.title)
@@ -278,7 +263,7 @@ def _start_live_updates(hass, entry, client, coordinator, base_url, api_key) -> 
 
 
 def _ac_payload(temp, unit) -> dict:
-    """Build the A/C payload. Send both keys or the server drops the setpoint."""
+    """Build the climate payload. Send both keys or the server drops the setpoint."""
     try:
         temp = int(temp)
     except (TypeError, ValueError):
@@ -328,7 +313,6 @@ def _resolve_car(hass: HomeAssistant, entry_id: str | None, vin: str | None):
 
 
 async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
-    # Unload platforms
     unload_ok = await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
 
     stored = hass.data.get(DOMAIN, {}).pop(entry.entry_id, None) or {}

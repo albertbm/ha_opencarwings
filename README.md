@@ -8,122 +8,164 @@
 [![BuyMeCoffee][buymecoffeebadge]][buymecoffee]
 
 [![Community Forum][forum-shield]][forum]
-[![hacs_badge](https://img.shields.io/badge/HACS-Default-41BDF5.svg?style=for-the-badge)](https://github.com/hacs/integration)
 
-Nice, lightweight Home Assistant integration that connects to the OpenCARWINGS API to expose your Nissan (or compatible) cars as devices in Home Assistant.
+Home Assistant integration for the [OpenCARWINGS][opencarwings] server. Each Nissan (or
+compatible) car on your account becomes a device carrying the readings the car uploads
+and the remote commands its TCU accepts.
 
----
+## Support the project
 
-## Support the project ☕
+This is my first integration for HA. If you find it useful, you can
+[buy me a coffee][buymecoffee].
 
-This is my first integration for HA. If you find it useful I'd really appreciate if you buy me a coffe:
-[!["Buy Me A Coffee"](https://www.buymeacoffee.com/assets/img/custom_images/orange_img.png)](https://www.buymeacoffee.com/czapeczek)
+## What you get
 
+One device per car. Entity IDs are built from the car's nickname, so a car called
+"DKL" gets `sensor.dkl_odometer`, `switch.dkl_climate`, and so on.
 
----
+### Sensors
 
-## What it supports ✅
+| Entity | Notes |
+|---|---|
+| State of charge | Percentage, recorded for statistics |
+| State of charge display | What the dashboard shows, which can differ |
+| Range (climate on) / Range (climate off) | Kilometres |
+| Charge bars | The dashboard's bar count |
+| Odometer | Kilometres, recorded as a total for long-term statistics |
+| Charge time (3kW / 1.4kW / 6.6kW) | Minutes remaining, empty when the car has no estimate |
+| Status | One of `charging`, `running`, `ac_on`, `idle` |
+| VIN | Diagnostic |
+| Last updated | When the car last reported. Diagnostic |
+| Last requested | When a command was last sent to the car. Diagnostic |
 
-Per car the integration currently exposes:
+### Binary sensors
 
-- Sensors
-  - Range (A/C on / A/C off)
-  - Charge cable plugged in (plugged / unplugged)
-  - High-level status (charging / running / ac_on / idle)
-  - **Per-car "Last Updated"** (diagnostic): reports the ISO 8601 timestamp of the last direct reading from the car. The sensor is created per VIN, shows the most recent timestamp found in `ev_info.last_updated`, `location.last_updated`, or `last_connection`, and has the unique id pattern `ha_opencarwings_last_updated_<VIN>`.
-  - **Per-car "Last Requested"** (diagnostic): reports the last time the integration requested data from the API (coordinator's last update time). The sensor is created per VIN and has the unique id pattern `ha_opencarwings_last_requested_<VIN>`.
-  - A top-level `OpenCARWINGS Cars` sensor listing your cars and VINs
-- Device tracker: car GPS (uses `last_location` / `location` returned by the API). The tracker entity is attached to the same car device as the per-car buttons and shares the car VIN as the device identifier; the tracker entity itself keeps a stable `unique_id` of the form `ha_opencarwings_tracker_<VIN>`. The visible name prefers the car's `nickname` if present, otherwise it falls back to `model_name` (for example, "MyCar Tracker").
-- Switch: A/C control (on/off) — sends commands to the car via the OpenCARWINGS command endpoint
-- Button: **Manual refresh** — a per-integration button is available to force an immediate refresh from the OpenCARWINGS service (unique id: `ha_opencarwings_refresh_<entry_id>`).
-- Button: **Per-car "Request refresh"** — each car has a per-vehicle button labeled like `Request data refresh for <nickname|model>` (for example, "Request data refresh for MyCar"). Pressing it sends a "Refresh data" command to OpenCARWINGS (unique id: `ha_opencarwings_car_refresh_<VIN>`).
+Charge cable, Charging, Quick charging, Charge finish, Climate status, Eco mode, Running.
 
----
+### Controls
 
-## History & Recorder ⚠️
+| Entity | What it does |
+|---|---|
+| Climate (switch) | Sends climate on/off. Follows the car's reported state |
+| Requested temperature (number) | 0–31 °C, sent with the next climate on |
+| Remote start (switch) | Paired start/stop commands |
+| Horn and lights (switch) | Paired on/off commands |
+| Lock, Unlock, Horn, Lights (buttons) | One command per press |
+| Charge start, Charge to 80% (buttons) | |
+| Request data refresh (button) | Wakes the car and asks it to upload |
+| Read configuration (button) | Diagnostic |
 
-The per-car **Last Updated** sensors are marked as diagnostic (they're metadata, not a regularly changing state) and are typically not recorded by Home Assistant's Recorder. If you want to ensure these sensors are excluded from history/recorder, add an exclusion to your `configuration.yaml`:
+### Device tracker
 
-```yaml
-recorder:
-  exclude:
-    entity_globs:
-      - "sensor.ha_opencarwings_last_updated_*"
-      - "sensor.ha_opencarwings_last_requested_*"
-```
+The car's position, from the server's last location fix. It sits on the same device as
+the sensors and buttons.
 
-This will prevent per-car `Last Updated` sensors from being stored in your database and showing up in history charts.
+## What it cannot do
 
----
+The integration can only report what the OpenCARWINGS API returns, and the API only
+knows what the car's TCU uploads.
 
-## Entity names & unique IDs 🔎
+- The TCU never reports whether the doors are locked. Lock and unlock are buttons, and
+  there is no `lock` entity.
+- The server takes a temperature with the climate on command but never reports back what
+  the car settled on. Requested temperature holds your request, and the car may be doing
+  something else.
+- Cabin temperature is in the API, but on the car this was developed against it always
+  reads as the no-data sentinel. No sensor is exposed for it.
+- Remote start and Horn and lights have no state at all in the API. They show as
+  assumed-state toggles holding the last command sent.
+- Sending a temperature needs a Ficosa 2016 TCU. Older Continental units reject the
+  payload.
 
-A few helpful naming/ID patterns to identify entities created by the integration:
+## How it stays up to date
 
-- Device tracker name: uses `nickname` when available, otherwise `model_name`. Visible name example: `MyCar Tracker`.
-- Tracker unique_id: `ha_opencarwings_tracker_<VIN>`
-- Tracker device identifier: `tracker_<VIN>` (the tracker appears as a separate device; the entity unique id above still applies)
-- Per-car "Last Updated" sensor: `ha_opencarwings_last_updated_<VIN>`
-- Car refresh button label: `Request data refresh for <nickname|model>` (visible name) — unique id: `ha_opencarwings_car_refresh_<VIN>`
-- A/C switch: `ha_opencarwings_ac_<VIN>`
+Two paths, both running at once:
 
-These stable IDs are useful when excluding entities from the recorder or when writing automations targeting specific cars.
+1. A websocket to the server's `/ws/notif/` endpoint. The server pushes each object as
+   it writes it, so entities follow the car live.
+2. Polling on your configured interval, as a safety net if the socket drops.
 
-These entities are created per-VIN and appear as devices in the Integrations UI.
+Neither wakes the car. Only a command does that, and the one for this job is the
+per-car **Request data refresh** button.
 
----
+The server gives the car up to five minutes to answer a command. The integration
+follows each one in the background and fires
+`ha_opencarwings_command_finished` on the event bus when it resolves, with `vin`,
+`command_type`, `result` (`success`, `error` or `timeout`) and `seconds`. Alerts pushed
+by the server fire as `ha_opencarwings_alert`.
 
-## Installation 🔧
+## Installation
 
-Choose one of the options below:
+### HACS
 
-[![Open your Home Assistant instance and open a repository inside the Home Assistant Community Store.][hacs-repo-badge]][hacs-install]
+HACS → Integrations → three dots → Custom repositories → add this repository with
+category "Integration" → Install → restart Home Assistant.
 
-1. HACS (recommended)
-   - In HACS: Integrations → three dots → Custom repositories → Add this repository as category "Integration" → Install → Restart Home Assistant
-2. Manual
-   - Copy the `custom_components/ha_opencarwings` directory into `<config>/custom_components/` on your Home Assistant host
-   - Restart Home Assistant
-   - Go to Settings → Devices & Services → Add Integration → search for **OpenCARWINGS** and follow the setup flow
+### Manual
 
----
+Copy `custom_components/ha_opencarwings` into `<config>/custom_components/` and restart
+Home Assistant.
 
-## Configuration ⚙️
+Then: Settings → Devices & Services → Add Integration → **OpenCARWINGS**.
 
-Setup is done via the UI. You will need:
+## Configuration
 
-- **API key** for your OpenCARWINGS account. Sign in to the server in a browser, open your account settings and copy the personal API key from there.
-- **Scan interval** (polling frequency, default: 15 minutes). The setup and options flows present a friendly select with labeled choices (for example: "1 minute", "15 minutes (default)", "1 hour", "1 day").
-- **API base URL** (optional — defaults to the known OpenCARWINGS endpoint)
+Everything is set in the UI, and every field can be changed later under the
+integration's Configure button.
 
-The key is sent as an `Authorization: Token <key>` header on every request. It never expires on its own, so there is nothing to refresh; resetting the key on the server invalidates the old one.
+| Field | |
+|---|---|
+| API key | Required. Sign in to the server in a browser, open your account settings and copy the personal API key |
+| Scan interval | How often to re-read the server. Default 15 minutes |
+| API base URL | Optional. Defaults to the public instance |
+| Command PIN | Your account PIN, if you set one on the server. Without it the server refuses lock, unlock, horn, lights and remote start |
+| GPS radius | Kilometres from Home. Fixes beyond it are ignored and the last good one held. See below. Set 0 to accept every fix |
+
+The key goes out as `Authorization: Token <key>` on every request. It does not expire;
+resetting it on the server invalidates the old one.
+
+### The GPS radius
+
+Some head units hold the wrong map region or stale map data and report a position
+hundreds of kilometres from where the car actually is, while the TCU has it right.
+Setting a radius drops those fixes and keeps the last good position on the map. Off by
+default.
 
 ### Upgrading from username and password
 
-Versions up to 0.6.0 signed in with a username and password and stored JWT tokens. On upgrade, existing entries are migrated and Home Assistant shows a **Reconfigure**/repair prompt asking for your API key. The old username and tokens are deleted once the new key is accepted.
+Versions up to 0.6.0 signed in with a username and password. On upgrade, Home Assistant
+shows a reauthentication prompt asking for your API key; the old credentials are deleted
+once the new key is accepted.
 
----
+## Actions
 
-## Development & Tests 🧪
+`ha_opencarwings.refresh` re-reads the server, optionally for one account only.
 
-- Run tests with: `pytest`
-- The repository includes Home Assistant test stubs under `tests/stubs/` to make running unit tests easier.
+`ha_opencarwings.ac_on` turns the climate on at a temperature you pass in, overriding the
+Requested temperature entity. Takes `temp` (0–31), `unit` (celsius or fahrenheit), and
+optionally `vin` and `entry_id`.
 
----
+## Development
 
-## Reporting issues & Contributing 🤝
+```
+pytest
+```
 
-Found a bug or want a feature? Please open an issue or a PR at: https://github.com/czapeczek/ha_opencarwings
+Home Assistant stubs live under `tests/stubs/`, so the suite runs without installing
+Home Assistant.
 
-Contributions, fixes and improvements are welcome!
+## Issues and contributions
 
----
+Bugs and pull requests: https://github.com/czapeczek/ha_opencarwings
 
-## Thank you 🙏
+## Thanks
 
-A big thank you to the OpenCARWINGS project for providing the reverse-engineered API that makes this integration possible: https://github.com/developerfromjokela/opencarwings
+To the [OpenCARWINGS project][opencarwings] for the reverse-engineered API this is
+built on.
 
 <!-- Badges -->
+[opencarwings]: https://github.com/developerfromjokela/opencarwings
+
 [releases-shield]: https://img.shields.io/github/v/release/czapeczek/ha_opencarwings?style=for-the-badge
 [releases]: https://github.com/czapeczek/ha_opencarwings/releases
 
@@ -139,5 +181,3 @@ A big thank you to the OpenCARWINGS project for providing the reverse-engineered
 
 [forum-shield]: https://img.shields.io/badge/community-forum-blue.svg?style=for-the-badge
 [forum]: https://community.home-assistant.io/
-[hacs-repo-badge]: https://my.home-assistant.io/badges/hacs_repository.svg
-[hacs-install]: https://my.home-assistant.io/redirect/hacs_repository/?owner=czapeczek&repository=ha_opencarwings&category=Integration

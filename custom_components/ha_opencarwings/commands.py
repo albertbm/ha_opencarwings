@@ -103,7 +103,7 @@ async def async_send_command(
     client = hass.data[DOMAIN][entry_id]["client"]
 
     payload: dict[str, Any] = {"vin": vin, "command_type": command_type}
-    # Only A/C on and config accept one; other commands 400 with it.
+    # Only climate on and config accept one; other commands 400 with it.
     if command_payload:
         payload["command_payload"] = command_payload
     # Ignored by the server on commands that do not need it.
@@ -117,8 +117,7 @@ async def async_send_command(
         _LOGGER.exception("Failed to %s for %s", description, vin)
         raise HomeAssistantError(f"Could not {description}: {err}") from err
 
-    # async_request returns the response untouched, so a rejected command
-    # looks like a success unless we check.
+    # async_request hands back the response untouched, so check it.
     status = getattr(resp, "status", 200)
     if status >= 400:
         message = await _error_message(resp)

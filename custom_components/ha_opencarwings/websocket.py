@@ -91,8 +91,11 @@ class CarWingsSocket:
         self._closing = False
 
     def start(self) -> None:
-        if self._task is None:
-            self._task = self.hass.async_create_task(self._run(), "ha_opencarwings websocket")
+        if self._task is not None:
+            return
+        # A plain task would hold up Home Assistant's startup.
+        create = getattr(self.hass, "async_create_background_task", None) or self.hass.async_create_task
+        self._task = create(self._run(), "ha_opencarwings websocket")
 
     async def stop(self) -> None:
         self._closing = True

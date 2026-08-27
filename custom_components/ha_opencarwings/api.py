@@ -31,9 +31,7 @@ class RequestError(Exception):
 class OpenCarWingsAPI:
     def __init__(self, hass, base_url: str = DEFAULT_API_BASE, api_key: str | None = None) -> None:
         self.hass = hass
-        # Import the helper dynamically so tests that monkeypatch
-        # `homeassistant.helpers.aiohttp_client.async_get_clientsession`
-        # will be respected.
+        # Imported here so tests can monkeypatch the session helper.
         try:
             import importlib
 
@@ -57,11 +55,7 @@ class OpenCarWingsAPI:
         return await self.async_get_cars()
 
     async def async_get_cars(self) -> list:
-        """Retrieve a list of cars for the authenticated account.
-
-        Returns a list of car objects (as dictionaries) on success.
-        Raises RequestError or AuthenticationError on failures.
-        """
+        """Every car on this account."""
         resp = await self.async_request("GET", "/api/car/")
         if resp.status in (401, 403):
             raise AuthenticationError("Not authorized to fetch cars")
@@ -71,7 +65,6 @@ class OpenCarWingsAPI:
             raise RequestError(f"Failed fetching cars: {resp.status}")
 
         data = await resp.json()
-        # Expecting an array of car objects
         return data
 
     async def async_request(self, method: str, path: str, **kwargs) -> ClientResponse:
@@ -90,7 +83,7 @@ class OpenCarWingsAPI:
         return resp
 
     async def async_get_car_by_vin(self, vin: str) -> dict:
-        """Retrieve full car detail by VIN."""
+        """One car, with the fields the list endpoint omits."""
         vin = (vin or "").strip()
         if not vin:
             raise RequestError("VIN missing")

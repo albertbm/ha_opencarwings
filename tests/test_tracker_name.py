@@ -18,7 +18,7 @@ async def test_tracker_name_uses_nickname_and_device_name():
     assert len(trackers) == 1
     t = trackers[0]
     assert t.unique_id == "ha_opencarwings_tracker_VIN1"
-    assert t.name == "MyCar Tracker"
+    assert t._attr_translation_key == "tracker"
     assert t.device_info["name"] == "MyCar"
     # tracker should be attached to the car device (use VIN identifier)
     assert list(t.device_info["identifiers"])[0][1] == "VIN1"
@@ -42,7 +42,7 @@ async def test_two_car_trackers_have_unique_devices():
 
 
 @pytest.mark.asyncio
-async def test_tracker_name_falls_back_to_model_and_no_vin_in_name():
+async def test_tracker_device_falls_back_to_model_name():
     hass = type("H", (), {"data": {"ha_opencarwings": {"e1": {"cars": [{"vin": "VIN1", "model_name": "M1", "last_location": {"lat": "50.0", "lon": "20.0"}}]}}}})()
 
     trackers = []
@@ -55,5 +55,4 @@ async def test_tracker_name_falls_back_to_model_and_no_vin_in_name():
 
     assert len(trackers) == 1
     t = trackers[0]
-    assert t.name == "M1 Tracker"
-    assert "VIN1" not in t.name
+    assert t.device_info["name"] == "M1"

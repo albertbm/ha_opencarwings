@@ -20,3 +20,19 @@ class Entity:
     @property
     def state(self):
         return None
+
+    @property
+    def device_class(self):
+        return getattr(self, "_attr_device_class", None)
+
+    @property
+    def state_class(self):
+        return getattr(self, "_attr_state_class", None)
+
+    @property
+    def native_unit_of_measurement(self):
+        return getattr(self, "_attr_native_unit_of_measurement", None)
+
+    @property
+    def icon(self):
+        return getattr(self, "_attr_icon", None)

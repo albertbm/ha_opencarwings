@@ -3,3 +3,16 @@ CONF_PASSWORD = "password"
 CONF_API_KEY = "api_key"
 ATTR_ATTRIBUTION = "attribution"
 PERCENTAGE = "%"
+
+
+ATTR_TEMPERATURE = "temperature"
+
+
+class UnitOfTemperature:
+    CELSIUS = "°C"
+    FAHRENHEIT = "°F"
+
+
+class UnitOfLength:
+    KILOMETERS = "km"
+    MILES = "mi"

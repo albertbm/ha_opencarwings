@@ -18,3 +18,16 @@ class SensorEntity(Entity):
     @property
     def entity_category(self):
         return getattr(self, "_attr_entity_category", None)
+
+
+class SensorStateClass:
+    MEASUREMENT = "measurement"
+    TOTAL = "total"
+    TOTAL_INCREASING = "total_increasing"
+
+
+class SensorDeviceClass:
+    BATTERY = "battery"
+    TIMESTAMP = "timestamp"
+    DURATION = "duration"
+    DISTANCE = "distance"

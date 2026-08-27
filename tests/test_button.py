@@ -74,7 +74,7 @@ async def test_car_refresh_button_created_and_has_unique_id():
 
 
 @pytest.mark.asyncio
-async def test_car_refresh_button_has_friendly_name():
+async def test_car_refresh_button_is_named_by_translation():
     hass = type("H", (), {"data": {"ha_opencarwings": {"e1": {"coordinator": None, "cars": [{"vin": "VIN1", "model_name": "M1", "nickname": "MyCar"}]}}}})()
 
     added = []
@@ -93,11 +93,11 @@ async def test_car_refresh_button_has_friendly_name():
             break
 
     assert car_btn is not None
-    assert car_btn.name == "Request data refresh for MyCar"
+    assert car_btn._attr_translation_key == "refresh"
 
 
 @pytest.mark.asyncio
-async def test_car_refresh_button_falls_back_to_model_name():
+async def test_car_refresh_button_is_attached_to_the_car_device():
     hass = type("H", (), {"data": {"ha_opencarwings": {"e1": {"coordinator": None, "cars": [{"vin": "VIN1", "model_name": "M1"}]}}}})()
 
     added = []
@@ -116,7 +116,7 @@ async def test_car_refresh_button_falls_back_to_model_name():
             break
 
     assert car_btn is not None
-    assert car_btn.name == "Request data refresh for M1"
+    assert car_btn.device_info["name"] == "M1"
 
 
 @pytest.mark.asyncio
@@ -233,7 +233,7 @@ async def test_car_chargestart_button_created_and_has_unique_id():
 
 
 @pytest.mark.asyncio
-async def test_car_chargestart_button_has_friendly_name():
+async def test_car_chargestart_button_is_named_by_translation():
     hass = type("H", (), {"data": {"ha_opencarwings": {"e1": {"coordinator": None, "cars": [{"vin": "VIN1", "model_name": "M1", "nickname": "MyCar"}]}}}})()
 
     added = []
@@ -251,7 +251,7 @@ async def test_car_chargestart_button_has_friendly_name():
             break
 
     assert charge_btn is not None
-    assert charge_btn.name == "Charge start for MyCar"
+    assert charge_btn._attr_translation_key == "charge_start"
 
 
 @pytest.mark.asyncio

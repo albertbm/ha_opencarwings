@@ -1,4 +1,4 @@
-"""Sensor platform for OpenCARWINGS listing cars."""
+"""Sensor platform for the car's readings and diagnostics."""
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -7,7 +7,7 @@ from typing import Any, Callable, Optional
 import logging
 
 from homeassistant.components.sensor import SensorEntity
-from homeassistant.const import ATTR_ATTRIBUTION, PERCENTAGE
+from homeassistant.const import ATTR_ATTRIBUTION, PERCENTAGE, UnitOfLength
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 try:
@@ -16,28 +16,19 @@ except Exception:  # pragma: no cover
     class EntityCategory:  # type: ignore
         DIAGNOSTIC = "diagnostic"
 
-try:
-    from homeassistant.components.sensor import SensorDeviceClass
-except Exception:  # pragma: no cover
-    class SensorDeviceClass:  # type: ignore
-        BATTERY = "battery"
-        TIMESTAMP = "timestamp"
-        DURATION = "duration"
+from homeassistant.components.sensor import SensorDeviceClass, SensorStateClass
 
 from . import DOMAIN
+from .entity import OpenCarwingsCarEntity
 
 _LOGGER = logging.getLogger(__name__)
 
-
-# -----------------------------
-# Helpers
-# -----------------------------
 
 def _parse_ts(value: str | None):
     if not value:
         return None
     try:
-        # support ISO8601 like `2026-01-04T12:00:00Z` or with microseconds `...10.419903Z`
+        # The server sends both `...:00Z` and `...:00.419903Z`.
         if value.endswith("Z"):
             try:
                 return datetime.strptime(value, "%Y-%m-%dT%H:%M:%S.%fZ").replace(tzinfo=timezone.utc)
@@ -145,50 +136,13 @@ def _round_1(v: Any) -> float | None:
     except Exception:
         return None
 
-# -----------------------------
-# Base per-car entity
-# -----------------------------
-
-class OpenCarwingsCarEntity(CoordinatorEntity):
-    """Base entity for a single car identified by VIN.
-
-    - merges seed car dict (from initial cars list) with coordinator car dict
-      so fields like odometer don't disappear if coordinator payload is missing them
-    """
-
-    def __init__(self, coordinator, entry_id: str, vin: str, seed_car: dict | None = None) -> None:
-        super().__init__(coordinator)
-        self._entry_id = entry_id
-        self._vin = vin
-        self._seed_car = seed_car or {}
-
-    def _get_car(self) -> dict:
-        # Merge: seed -> coordinator (coordinator wins, seed fills missing fields)
-        if self.coordinator and getattr(self.coordinator, "data", None):
-            for c in self.coordinator.data:
-                if c.get("vin") == self._vin:
-                    return {**self._seed_car, **(c or {})}
-        return self._seed_car or {}
-
-    @property
-    def device_info(self) -> dict[str, Any]:
-        car = self._get_car()
-        return {
-            "identifiers": {(DOMAIN, self._vin)},
-            "name": car.get("nickname") or car.get("model_name") or "Car",
-            "manufacturer": car.get("make") or "Nissan",
-            "model": car.get("model_name") or "Leaf",
-        }
-
-
-
 @dataclass(frozen=True)
 class CarSensorSpec:
     key: str
-    name: str
     value: Callable[[dict], Any]
     transform: Optional[Callable[[Any], Any]] = None
     device_class: Optional[str] = None
+    state_class: Optional[str] = None
     unit_of_measurement: Optional[str] = None
     icon: Optional[str] = None
 
@@ -202,41 +156,39 @@ def _to_int(v: Any) -> int | None:
         return None
 
 
-def _plugged_to_str(v: Any) -> str:
-    return "plugged" if bool(v) else "unplugged"
-
-
 CAR_SENSORS: list[CarSensorSpec] = [
     CarSensorSpec(
         "range_acon",
-        "Range (A/C on)",
         _ev_getter("range_acon"),
         transform=_to_float,
-        unit_of_measurement="km",
+        device_class=SensorDeviceClass.DISTANCE,
+        state_class=SensorStateClass.MEASUREMENT,
+        unit_of_measurement=UnitOfLength.KILOMETERS,
         icon="mdi:map-marker-distance",
     ),
     CarSensorSpec(
         "range_acoff",
-        "Range (A/C off)",
         _ev_getter("range_acoff"),
         transform=_to_float,
-        unit_of_measurement="km",
+        device_class=SensorDeviceClass.DISTANCE,
+        state_class=SensorStateClass.MEASUREMENT,
+        unit_of_measurement=UnitOfLength.KILOMETERS,
         icon="mdi:map-marker-distance",
     ),
-    CarSensorSpec("soc", "State of Charge", _ev_getter("soc"), transform=_round_1, device_class=SensorDeviceClass.BATTERY, unit_of_measurement=PERCENTAGE),
-    CarSensorSpec("soc_display", "State of Charge Display", _ev_getter("soc_display"), transform=_round_1, device_class=SensorDeviceClass.BATTERY, unit_of_measurement=PERCENTAGE),
-    CarSensorSpec("charge_bars", "Charge Bars", _ev_getter("charge_bars"), icon="mdi:battery-charging-medium"),
-    CarSensorSpec("plugged_in", "Charge Cable", _ev_getter("plugged_in"), transform=_plugged_to_str, icon="mdi:ev-plug-type1"),
-    CarSensorSpec("charging", "Charging", _ev_getter("charging"), icon="mdi:battery-charging"),
-    CarSensorSpec("charge_finish", "Charge Finish", _ev_getter("charge_finish"), icon="mdi:battery-check"),
-    CarSensorSpec("quick_charging", "Quick Charging", _ev_getter("quick_charging"), icon="mdi:ev-station"),
-    CarSensorSpec("ac_status", "AC Status", _ev_getter("ac_status"), icon="mdi:air-conditioner"),
-    CarSensorSpec("eco_mode", "Eco Mode", _ev_getter("eco_mode"), icon="mdi:leaf"),
-    CarSensorSpec("car_running", "Running", _ev_getter("car_running"), icon="mdi:car-electric"),
-    CarSensorSpec("odometer", "Odometer", lambda car: car.get("odometer"), transform=_to_int, unit_of_measurement="km", icon="mdi:counter"),
+    CarSensorSpec("soc", _ev_getter("soc"), transform=_round_1, device_class=SensorDeviceClass.BATTERY, state_class=SensorStateClass.MEASUREMENT, unit_of_measurement=PERCENTAGE),
+    CarSensorSpec("soc_display", _ev_getter("soc_display"), transform=_round_1, device_class=SensorDeviceClass.BATTERY, state_class=SensorStateClass.MEASUREMENT, unit_of_measurement=PERCENTAGE),
+    CarSensorSpec("charge_bars", _ev_getter("charge_bars"), icon="mdi:battery-charging-medium"),
+    CarSensorSpec(
+        "odometer",
+        lambda car: car.get("odometer"),
+        transform=_to_int,
+        device_class=SensorDeviceClass.DISTANCE,
+        state_class=SensorStateClass.TOTAL_INCREASING,
+        unit_of_measurement=UnitOfLength.KILOMETERS,
+        icon="mdi:counter",
+    ),
     CarSensorSpec(
         "full_chg_time",
-        "Charge Time (3kW)",
         _ev_getter("full_chg_time"),
         transform=_chg_minutes,
         device_class=SensorDeviceClass.DURATION,
@@ -245,7 +197,6 @@ CAR_SENSORS: list[CarSensorSpec] = [
     ),
     CarSensorSpec(
         "limit_chg_time",
-        "Charge Time (1.4kW)",
         _ev_getter("limit_chg_time"),
         transform=_chg_minutes,
         device_class=SensorDeviceClass.DURATION,
@@ -254,7 +205,6 @@ CAR_SENSORS: list[CarSensorSpec] = [
     ),
     CarSensorSpec(
         "obc_6kw",
-        "Charge Time (6.6kW)",
         _ev_getter("obc_6kw"),
         transform=_chg_minutes,
         device_class=SensorDeviceClass.DURATION,
@@ -265,24 +215,21 @@ CAR_SENSORS: list[CarSensorSpec] = [
 
 
 class CarValueSensor(OpenCarwingsCarEntity, SensorEntity):
-    """Generic per-car sensor based on CarSensorSpec."""
+    """One value from CAR_SENSORS."""
 
     def __init__(self, coordinator, entry_id: str, vin: str, spec: CarSensorSpec, seed_car: dict | None = None) -> None:
         OpenCarwingsCarEntity.__init__(self, coordinator, entry_id, vin, seed_car)
         self._spec = spec
         self._attr_unique_id = f"ha_opencarwings_{spec.key}_{vin}"
+        self._attr_translation_key = spec.key
         if spec.device_class:
             self._attr_device_class = spec.device_class
+        if spec.state_class:
+            self._attr_state_class = spec.state_class
         if spec.icon:
             self._attr_icon = spec.icon
         if spec.unit_of_measurement:
             self._attr_native_unit_of_measurement = spec.unit_of_measurement
-
-    @property
-    def name(self) -> str:
-        car = self._get_car()
-        prefix = car.get("nickname") or car.get("model_name") or "Car"
-        return f"{prefix} {self._spec.name}"
 
     @property
     def native_value(self):
@@ -294,10 +241,6 @@ class CarValueSensor(OpenCarwingsCarEntity, SensorEntity):
         return val
 
 
-# -----------------------------
-# Status sensor 
-# -----------------------------
-
 class CarStatusSensor(OpenCarwingsCarEntity, SensorEntity):
     """High-level status string for the car (charging, running, ac_on, idle)."""
 
@@ -306,12 +249,7 @@ class CarStatusSensor(OpenCarwingsCarEntity, SensorEntity):
     def __init__(self, coordinator, entry_id: str, vin: str, seed_car: dict | None = None) -> None:
         super().__init__(coordinator, entry_id, vin, seed_car)
         self._attr_unique_id = f"ha_opencarwings_status_{vin}"
-
-    @property
-    def name(self) -> str:
-        car = self._get_car()
-        prefix = car.get("nickname") or car.get("model_name") or "Car"
-        return f"{prefix} Status"
+        self._attr_translation_key = "status"
 
     @property
     def native_value(self) -> str:
@@ -327,7 +265,6 @@ class CarStatusSensor(OpenCarwingsCarEntity, SensorEntity):
 
     @property
     def extra_state_attributes(self) -> dict[str, Any]:
-        # Keep this SMALL and SAFE (optional). Remove entirely if you want no attributes.
         car = self._get_car()
         ev = car.get("ev_info", {}) or {}
         return {
@@ -339,12 +276,8 @@ class CarStatusSensor(OpenCarwingsCarEntity, SensorEntity):
         }
 
 
-# -----------------------------
-# Diagnostic sensors
-# -----------------------------
-
 class CarVINSensor(OpenCarwingsCarEntity, SensorEntity):
-    """Per-car diagnostic sensor reporting the VIN."""
+    """The car's VIN."""
 
     _attr_icon = "mdi:identifier"
     _attr_entity_category = EntityCategory.DIAGNOSTIC
@@ -352,12 +285,7 @@ class CarVINSensor(OpenCarwingsCarEntity, SensorEntity):
     def __init__(self, coordinator, entry_id: str, vin: str, seed_car: dict | None = None) -> None:
         super().__init__(coordinator, entry_id, vin, seed_car)
         self._attr_unique_id = f"ha_opencarwings_vin_{vin}"
-
-    @property
-    def name(self) -> str:
-        car = self._get_car()
-        prefix = car.get("nickname") or car.get("model_name") or "Car"
-        return f"{prefix} VIN"
+        self._attr_translation_key = "vin"
 
     @property
     def native_value(self) -> str:
@@ -365,7 +293,7 @@ class CarVINSensor(OpenCarwingsCarEntity, SensorEntity):
 
 
 class CarLastUpdatedSensor(OpenCarwingsCarEntity, SensorEntity):
-    """Diagnostic: timestamp provided by the car (ev_info.last_updated or location or last_connection)."""
+    """When the car last reported, not when we last polled."""
 
     _attr_icon = "mdi:cloud-download-outline"
     _attr_entity_category = EntityCategory.DIAGNOSTIC
@@ -374,12 +302,7 @@ class CarLastUpdatedSensor(OpenCarwingsCarEntity, SensorEntity):
     def __init__(self, coordinator, entry_id: str, vin: str, seed_car: dict | None = None) -> None:
         super().__init__(coordinator, entry_id, vin, seed_car)
         self._attr_unique_id = f"ha_opencarwings_last_updated_{vin}"
-
-    @property
-    def name(self) -> str:
-        car = self._get_car()
-        prefix = car.get("nickname") or car.get("model_name") or "Car"
-        return f"{prefix} Last Updated"
+        self._attr_translation_key = "last_updated"
 
     def _timestamp(self) -> datetime | None:
         car = self._get_car()
@@ -399,7 +322,7 @@ class CarLastUpdatedSensor(OpenCarwingsCarEntity, SensorEntity):
 
 
 class CarLastRequestedSensor(OpenCarwingsCarEntity, SensorEntity):
-    """Diagnostic: last command sent to the car, not the polling clock."""
+    """When a command was last sent to the car."""
 
     _attr_icon = "mdi:cloud-upload-outline"
     _attr_entity_category = EntityCategory.DIAGNOSTIC
@@ -408,12 +331,7 @@ class CarLastRequestedSensor(OpenCarwingsCarEntity, SensorEntity):
     def __init__(self, coordinator, entry_id: str, vin: str, seed_car: dict | None = None) -> None:
         super().__init__(coordinator, entry_id, vin, seed_car)
         self._attr_unique_id = f"ha_opencarwings_last_requested_{vin}"
-
-    @property
-    def name(self) -> str:
-        car = self._get_car()
-        prefix = car.get("nickname") or car.get("model_name") or "Car"
-        return f"{prefix} Last Requested"
+        self._attr_translation_key = "last_requested"
 
     def _timestamp(self) -> datetime | None:
         ts = self._get_car().get("command_request_time")
@@ -435,12 +353,8 @@ class CarLastRequestedSensor(OpenCarwingsCarEntity, SensorEntity):
         }
 
 
-# -----------------------------
-# Car list sensor
-# -----------------------------
-
 class CarListSensor(SensorEntity):
-    """Sensor that represents the list of cars for the account."""
+    """How many cars this account has."""
 
     _attr_icon = "mdi:car-multiple"
 
@@ -473,10 +387,6 @@ class CarListSensor(SensorEntity):
             self.async_on_remove(unsub)
 
 
-# -----------------------------
-# Setup
-# -----------------------------
-
 async def async_setup_entry(hass, entry, async_add_entities):
     data = hass.data.get(DOMAIN, {}).get(entry.entry_id, {})
     coordinator = data.get("coordinator")
@@ -490,14 +400,11 @@ async def async_setup_entry(hass, entry, async_add_entities):
         if not vin:
             continue
 
-        # Generic value sensors
         for spec in CAR_SENSORS:
             entities.append(CarValueSensor(coordinator, entry.entry_id, vin, spec, seed_car=car))
 
-        # Status
         entities.append(CarStatusSensor(coordinator, entry.entry_id, vin, seed_car=car))
 
-        # Diagnostics
         entities.append(CarLastUpdatedSensor(coordinator, entry.entry_id, vin, seed_car=car))
         entities.append(CarLastRequestedSensor(coordinator, entry.entry_id, vin, seed_car=car))
         entities.append(CarVINSensor(coordinator, entry.entry_id, vin, seed_car=car))

@@ -11,7 +11,6 @@ except ImportError:  # pragma: no cover - older stubs
 
 from .api import OpenCarWingsAPI, AuthenticationError, DEFAULT_API_BASE
 
-# Scan interval choices in minutes with friendly labels
 SCAN_INTERVAL_CHOICES = [
     (1, "1 minute"),
     (5, "5 minutes"),
@@ -24,11 +23,10 @@ SCAN_INTERVAL_CHOICES = [
     (720, "12 hours"),
     (1440, "1 day"),
 ]
-# Values used when selector is not available (fallback)
+# Used when the selector helper is missing.
 SCAN_INTERVAL_OPTIONS = [c[0] for c in SCAN_INTERVAL_CHOICES]
 DEFAULT_SCAN_INTERVAL_MIN = 15
 
-# Default API base URL
 DEFAULT_API_BASE_URL = DEFAULT_API_BASE
 
 from . import CONF_COMMAND_PIN, CONF_GPS_MAX_RADIUS_KM, DEFAULT_GPS_MAX_RADIUS_KM
@@ -50,7 +48,7 @@ def _scan_selector():
             )
         )
     except Exception:
-        # selector not available in minimal test stubs — use numeric options
+        # The test stubs have no selector helper.
         return vol.In(SCAN_INTERVAL_OPTIONS)
 
 
@@ -111,7 +109,6 @@ class OpenCARWINGSConfigFlow(config_entries.ConfigFlow, domain="ha_opencarwings"
                     title=_entry_title(api_base),
                     data={
                         CONF_API_KEY: api_key,
-                        # persist initial scan interval choice
                         "scan_interval": user_input.get("scan_interval", DEFAULT_SCAN_INTERVAL_MIN),
                         "api_base_url": api_base,
                         CONF_COMMAND_PIN: user_input.get(CONF_COMMAND_PIN, ""),

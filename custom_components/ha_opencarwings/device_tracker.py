@@ -42,7 +42,6 @@ async def async_setup_entry(hass, entry, async_add_entities):
     data = hass.data.get(DOMAIN, {}).get(entry.entry_id, {})
     coordinator = data.get("coordinator")
 
-    # If we have a coordinator, prefer its data; ensure it's primed before use
     cars = data.get("cars", [])
     if coordinator:
         if getattr(coordinator, "data", None) is None and hasattr(coordinator, "async_request_refresh"):
@@ -52,18 +51,21 @@ async def async_setup_entry(hass, entry, async_add_entities):
                 pass
         cars = getattr(coordinator, "data", None) or cars
 
-    # Only create trackers for cars with a VIN
     entities = [CarTracker(entry.entry_id, car, coordinator) for car in cars if car.get("vin")]
-    # Tests call entity methods directly; set hass on the entities for testability
+    # Tests call entity methods directly, so set hass here.
     for ent in entities:
         ent.hass = hass
     async_add_entities(entities)
 
 class CarTracker(TrackerEntity, RestoreEntity):
+    """Where the car is, per the server's last location fix."""
+
+    _attr_has_entity_name = True
+    _attr_translation_key = "tracker"
+
     def __init__(self, entry_id: str, car: dict, coordinator=None) -> None:
         self._entry_id = entry_id
-        # Live values come from the coordinator on every read; this is only a
-        # fallback for fields it does not carry.
+        # Only a fallback for fields the coordinator does not carry.
         self._seed_car = car or {}
         self._coordinator = coordinator
         self._vin = car.get("vin")
@@ -78,12 +80,6 @@ class CarTracker(TrackerEntity, RestoreEntity):
                 if isinstance(car, dict) and car.get("vin") == self._vin:
                     return {**self._seed_car, **car}
         return self._seed_car
-
-    @property
-    def name(self) -> str:
-        # Prefer the car nickname, then model name, then a fallback that includes the VIN
-        car = self._get_car()
-        return f"{car.get('nickname') or car.get('model_name') or f'Car {self._vin}'} Tracker"
 
     @property
     def unique_id(self) -> str:
@@ -144,13 +140,11 @@ class CarTracker(TrackerEntity, RestoreEntity):
         return None
 
     def _raw_lat_lon(self):
-        # Look for various forms of last location in the car data.
         car = self._get_car()
         loc = car.get("last_location") or car.get("location")
         if loc is None and isinstance(car.get("ev_info"), dict):
             loc = car.get("ev_info", {}).get("last_location")
 
-        # If the last_location is a list, use the first element.
         if isinstance(loc, list) and len(loc) > 0:
             loc = loc[0]
 
@@ -197,6 +191,10 @@ class CarTracker(TrackerEntity, RestoreEntity):
         self._reject(lat, lon, distance)
         return self._last_good or (None, None)
 
+    def _car_label(self) -> str:
+        car = self._get_car()
+        return car.get("nickname") or car.get("model_name") or self._vin
+
     def _reject(self, lat: float, lon: float, distance: float | None) -> None:
         """Record a discarded fix; log it only the first time."""
         reject = {
@@ -208,7 +206,7 @@ class CarTracker(TrackerEntity, RestoreEntity):
             _LOGGER.warning(
                 "%s: discarding implausible GPS fix %.6f, %.6f (%s km from home, "
                 "limit %s km); holding last known good position %s",
-                self.name,
+                self._car_label(),
                 lat,
                 lon,
                 reject["distance_from_home_km"],
@@ -232,7 +230,6 @@ class CarTracker(TrackerEntity, RestoreEntity):
 
     @property
     def location_name(self) -> str | None:
-        # opcjonalnie: pokaże nazwę strefy / opis
         car = self._get_car()
         loc = car.get("last_location") or car.get("location")
         if isinstance(loc, dict):
@@ -241,9 +238,6 @@ class CarTracker(TrackerEntity, RestoreEntity):
 
     @property
     def extra_state_attributes(self) -> dict[str, Any]:
-        # Expose VIN and basic car data so it's visible on the entity, and
-        # provide the raw last location under a single key for callers that
-        # want to inspect the original payload.
         car = self._get_car()
         raw_loc = None
         raw_src = None
@@ -272,8 +266,6 @@ class CarTracker(TrackerEntity, RestoreEntity):
 
     @property
     def device_info(self) -> dict[str, Any]:
-        # Attach the tracker to the car device so it appears under the same
-        # device as the per-car buttons (use the VIN as the device identifier).
         car = self._get_car()
         return {
             "identifiers": {(DOMAIN, self._vin)},

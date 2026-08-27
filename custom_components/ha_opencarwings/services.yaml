@@ -14,10 +14,10 @@ refresh:
           integration: ha_opencarwings
 
 ac_on:
-  name: Turn on the A/C with a temperature
+  name: Turn on the climate at a temperature
   description: >-
     Start preconditioning at a chosen temperature. Ficosa 2016 TCUs only;
-    older Continental TCUs reject the command outright.
+    older Continental TCUs reject it.
   fields:
     temp:
       name: Temperature
