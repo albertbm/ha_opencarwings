@@ -21,6 +21,7 @@ from .commands import (
     async_send_command,
     car_supports,
 )
+from .entity import async_add_cars
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -52,25 +53,17 @@ COMMAND_SWITCHES: tuple[CommandSwitchSpec, ...] = (
 
 
 async def async_setup_entry(hass, entry, async_add_entities):
-    data = hass.data.get(DOMAIN, {}).get(entry.entry_id, {})
-    coordinator = data.get("coordinator")
-    cars = getattr(coordinator, "data", None) or data.get("cars", [])
+    coordinator = hass.data.get(DOMAIN, {}).get(entry.entry_id, {}).get("coordinator")
 
-    entities = []
-    for car in cars:
-        if not car.get("vin"):
-            continue
-        entities.append(CarClimateSwitch(coordinator, entry.entry_id, car))
+    def _build(car: dict) -> list:
+        entities = [CarClimateSwitch(coordinator, entry.entry_id, car)]
         # Both halves, or the toggle only works one way.
         for spec in COMMAND_SWITCHES:
             if car_supports(car, spec.on_command) and car_supports(car, spec.off_command):
                 entities.append(CarCommandSwitch(entry.entry_id, car, spec, coordinator))
+        return entities
 
-    # Tests call entity methods directly, so set hass here.
-    for ent in entities:
-        ent.hass = hass
-
-    async_add_entities(entities)
+    async_add_cars(hass, entry, async_add_entities, _build)
 
 
 class CarClimateSwitch(CoordinatorEntity, SwitchEntity):

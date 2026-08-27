@@ -21,7 +21,8 @@ This is my first integration for HA. If you find it useful, you can
 ## What you get
 
 One device per car. Entity IDs are built from the car's nickname, so a car called
-"DKL" gets `sensor.dkl_odometer`, `switch.dkl_climate`, and so on.
+"DKL" gets `sensor.dkl_odometer`, `switch.dkl_climate`, and so on. Add a car to the
+account and its entities appear on the next poll or push, without a restart.
 
 ### Sensors
 

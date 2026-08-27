@@ -16,7 +16,7 @@ except Exception:  # pragma: no cover
         DIAGNOSTIC = "diagnostic"
 
 from . import DOMAIN
-from .entity import OpenCarwingsCarEntity
+from .entity import OpenCarwingsCarEntity, async_add_cars
 
 
 @dataclass(frozen=True)
@@ -48,20 +48,15 @@ CAR_BINARY_SENSORS: tuple[CarBinarySensorSpec, ...] = (
 
 
 async def async_setup_entry(hass, entry, async_add_entities):
-    data = hass.data.get(DOMAIN, {}).get(entry.entry_id, {})
-    coordinator = data.get("coordinator")
-    cars = getattr(coordinator, "data", None) or data.get("cars", [])
+    coordinator = hass.data.get(DOMAIN, {}).get(entry.entry_id, {}).get("coordinator")
 
-    entities = [
-        CarBinarySensor(coordinator, entry.entry_id, car["vin"], spec, car)
-        for car in cars
-        if car.get("vin")
-        for spec in CAR_BINARY_SENSORS
-    ]
-    for ent in entities:
-        ent.hass = hass
+    def _build(car: dict) -> list[CarBinarySensor]:
+        return [
+            CarBinarySensor(coordinator, entry.entry_id, car["vin"], spec, car)
+            for spec in CAR_BINARY_SENSORS
+        ]
 
-    async_add_entities(entities)
+    async_add_cars(hass, entry, async_add_entities, _build)
 
 
 class CarBinarySensor(OpenCarwingsCarEntity, BinarySensorEntity):

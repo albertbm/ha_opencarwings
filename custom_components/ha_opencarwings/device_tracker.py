@@ -20,6 +20,7 @@ except Exception:  # pragma: no cover - tests running without hass stubs
         pass
 
 from . import CONF_GPS_MAX_RADIUS_KM, DEFAULT_GPS_MAX_RADIUS_KM, DOMAIN
+from .entity import async_add_cars
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -39,23 +40,20 @@ def _haversine_km(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
 
 
 async def async_setup_entry(hass, entry, async_add_entities):
-    data = hass.data.get(DOMAIN, {}).get(entry.entry_id, {})
-    coordinator = data.get("coordinator")
+    coordinator = hass.data.get(DOMAIN, {}).get(entry.entry_id, {}).get("coordinator")
 
-    cars = data.get("cars", [])
-    if coordinator:
-        if getattr(coordinator, "data", None) is None and hasattr(coordinator, "async_request_refresh"):
+    if coordinator and getattr(coordinator, "data", None) is None:
+        if hasattr(coordinator, "async_request_refresh"):
             try:
                 await coordinator.async_request_refresh()
             except Exception:  # pragma: no cover - network
                 pass
-        cars = getattr(coordinator, "data", None) or cars
 
-    entities = [CarTracker(entry.entry_id, car, coordinator) for car in cars if car.get("vin")]
-    # Tests call entity methods directly, so set hass here.
-    for ent in entities:
-        ent.hass = hass
-    async_add_entities(entities)
+    def _build(car: dict) -> list:
+        return [CarTracker(entry.entry_id, car, coordinator)]
+
+    async_add_cars(hass, entry, async_add_entities, _build)
+
 
 class CarTracker(TrackerEntity, RestoreEntity):
     """Where the car is, per the server's last location fix."""

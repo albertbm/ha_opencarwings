@@ -26,6 +26,7 @@ from .commands import (
     async_send_command,
     car_supports,
 )
+from .entity import async_add_cars
 
 
 @dataclass(frozen=True)
@@ -56,27 +57,24 @@ _LOGGER = logging.getLogger(__name__)
 
 
 async def async_setup_entry(hass, entry, async_add_entities):
-    data = hass.data.get(DOMAIN, {}).get(entry.entry_id, {})
-    coordinator = data.get("coordinator")
+    coordinator = hass.data.get(DOMAIN, {}).get(entry.entry_id, {}).get("coordinator")
 
-    entities = [OpenCarWingsRefreshButton(entry.entry_id, coordinator=coordinator)]
+    entry_button = OpenCarWingsRefreshButton(entry.entry_id, coordinator=coordinator)
+    entry_button.hass = hass
+    async_add_entities([entry_button])
 
-    cars = getattr(coordinator, "data", None) or data.get("cars", [])
-    for car in cars:
-        if not car.get("vin"):
-            continue
-        entities.append(CarRefreshButton(entry.entry_id, car))
-        entities.append(CarChargeStartButton(entry.entry_id, car))
+    def _build(car: dict) -> list:
+        entities = [
+            CarRefreshButton(entry.entry_id, car),
+            CarChargeStartButton(entry.entry_id, car),
+        ]
         # Only what this TCU accepts.
         for spec in COMMAND_BUTTONS:
             if car_supports(car, spec.command_type):
                 entities.append(CarCommandButton(entry.entry_id, car, spec, coordinator))
+        return entities
 
-    # Tests call entity methods directly, so set hass here.
-    for ent in entities:
-        ent.hass = hass
-
-    async_add_entities(entities)
+    async_add_cars(hass, entry, async_add_entities, _build)
 
 
 class OpenCarWingsRefreshButton(ButtonEntity):

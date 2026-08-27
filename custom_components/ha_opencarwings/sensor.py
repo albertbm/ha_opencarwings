@@ -19,7 +19,7 @@ except Exception:  # pragma: no cover
 from homeassistant.components.sensor import SensorDeviceClass, SensorStateClass
 
 from . import DOMAIN
-from .entity import OpenCarwingsCarEntity
+from .entity import OpenCarwingsCarEntity, async_add_cars
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -490,21 +490,18 @@ async def async_setup_entry(hass, entry, async_add_entities):
     coordinator = data.get("coordinator")
     cars = coordinator.data if coordinator and coordinator.data is not None else data.get("cars", [])
 
-    entities: list[SensorEntity] = []
-    entities.append(CarListSensor(entry.entry_id, cars=cars, coordinator=coordinator))
+    async_add_entities([CarListSensor(entry.entry_id, cars=cars, coordinator=coordinator)])
 
-    for car in cars:
-        vin = car.get("vin")
-        if not vin:
-            continue
-
-        for spec in CAR_SENSORS:
-            entities.append(CarValueSensor(coordinator, entry.entry_id, vin, spec, seed_car=car))
-
+    def _build(car: dict) -> list[SensorEntity]:
+        vin = car["vin"]
+        entities: list[SensorEntity] = [
+            CarValueSensor(coordinator, entry.entry_id, vin, spec, seed_car=car)
+            for spec in CAR_SENSORS
+        ]
         entities.append(CarStatusSensor(coordinator, entry.entry_id, vin, seed_car=car))
-
         entities.append(CarLastUpdatedSensor(coordinator, entry.entry_id, vin, seed_car=car))
         entities.append(CarLastRequestedSensor(coordinator, entry.entry_id, vin, seed_car=car))
         entities.append(CarVINSensor(coordinator, entry.entry_id, vin, seed_car=car))
+        return entities
 
-    async_add_entities(entities)
+    async_add_cars(hass, entry, async_add_entities, _build)

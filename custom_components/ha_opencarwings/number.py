@@ -7,7 +7,7 @@ from homeassistant.helpers.restore_state import RestoreEntity
 
 from . import DOMAIN
 from .commands import CMD_AC_ON, car_supports
-from .entity import OpenCarwingsCarEntity
+from .entity import OpenCarwingsCarEntity, async_add_cars
 
 # The car takes a whole number in this range, in whichever unit it is told.
 MIN_TEMP = 0
@@ -25,19 +25,14 @@ def requested_temperature(hass, entry_id: str, vin: str) -> int:
 
 
 async def async_setup_entry(hass, entry, async_add_entities):
-    data = hass.data.get(DOMAIN, {}).get(entry.entry_id, {})
-    coordinator = data.get("coordinator")
-    cars = getattr(coordinator, "data", None) or data.get("cars", [])
+    coordinator = hass.data.get(DOMAIN, {}).get(entry.entry_id, {}).get("coordinator")
 
-    entities = [
-        CarRequestedTemperature(coordinator, entry.entry_id, car["vin"], car)
-        for car in cars
-        if car.get("vin") and car_supports(car, CMD_AC_ON)
-    ]
-    for ent in entities:
-        ent.hass = hass
+    def _build(car: dict) -> list:
+        if not car_supports(car, CMD_AC_ON):
+            return []
+        return [CarRequestedTemperature(coordinator, entry.entry_id, car["vin"], car)]
 
-    async_add_entities(entities)
+    async_add_cars(hass, entry, async_add_entities, _build)
 
 
 class CarRequestedTemperature(OpenCarwingsCarEntity, RestoreEntity, NumberEntity):
