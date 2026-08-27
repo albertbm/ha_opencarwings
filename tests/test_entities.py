@@ -16,9 +16,9 @@ async def test_battery_and_location_and_switch_creation(monkeypatch):
     # set up sensors
     await sensor_mod.async_setup_entry(hass, entry, add)
 
-    # Expect CarListSensor plus EV sensors (CarSensor removed as redundant)
-    # 1 list + 13 per car. The booleans live on the binary_sensor platform.
-    assert len(added) == 14
+    # One CarListSensor, then the specs plus status, last updated, last
+    # requested and VIN for the car.
+    assert len(added) == 1 + len(sensor_mod.CAR_SENSORS) + 4
 
     # new EV sensors
     def _val(e):

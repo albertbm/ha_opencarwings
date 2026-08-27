@@ -9,6 +9,12 @@ from homeassistant.components.binary_sensor import (
     BinarySensorEntity,
 )
 
+try:
+    from homeassistant.helpers.entity import EntityCategory
+except Exception:  # pragma: no cover
+    class EntityCategory:  # type: ignore
+        DIAGNOSTIC = "diagnostic"
+
 from . import DOMAIN
 from .entity import OpenCarwingsCarEntity
 
@@ -18,6 +24,7 @@ class CarBinarySensorSpec:
     key: str
     device_class: Optional[str] = None
     icon: Optional[str] = None
+    diagnostic: bool = False
 
 
 CAR_BINARY_SENSORS: tuple[CarBinarySensorSpec, ...] = (
@@ -32,6 +39,11 @@ CAR_BINARY_SENSORS: tuple[CarBinarySensorSpec, ...] = (
     CarBinarySensorSpec("eco_mode", icon="mdi:leaf"),
     CarBinarySensorSpec("car_running", BinarySensorDeviceClass.RUNNING,
                         "mdi:car-electric"),
+    CarBinarySensorSpec("batt_heater_status", BinarySensorDeviceClass.RUNNING,
+                        "mdi:radiator"),
+    CarBinarySensorSpec("batt_heater_avail", icon="mdi:radiator-disabled",
+                        diagnostic=True),
+    CarBinarySensorSpec("obc_6kw_avail", icon="mdi:flash", diagnostic=True),
 )
 
 
@@ -65,6 +77,8 @@ class CarBinarySensor(OpenCarwingsCarEntity, BinarySensorEntity):
             self._attr_device_class = spec.device_class
         if spec.icon:
             self._attr_icon = spec.icon
+        if spec.diagnostic:
+            self._attr_entity_category = EntityCategory.DIAGNOSTIC
 
     @property
     def is_on(self) -> bool | None:

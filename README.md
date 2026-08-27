@@ -33,14 +33,25 @@ One device per car. Entity IDs are built from the car's nickname, so a car calle
 | Charge bars | The dashboard's bar count |
 | Odometer | Kilometres, recorded as a total for long-term statistics |
 | Charge time (3kW / 1.4kW / 6.6kW) | Minutes remaining, empty when the car has no estimate |
+| State of health | Percentage the car reports for the pack |
+| Battery energy | Energy left in the pack, shown in kWh |
+| GIDs | Energy units the car counts in |
+| Capacity bars | The dashboard's capacity bars, out of 12 |
+| Gear | `park`, `drive` or `reverse` |
 | Status | One of `charging`, `running`, `ac_on`, `idle` |
 | VIN | Diagnostic |
 | Last updated | When the car last reported. Diagnostic |
 | Last requested | When a command was last sent to the car. Diagnostic |
+| Signal level, Carrier | The TCU's mobile connection. Diagnostic |
+| Max GIDs, Update counter | Diagnostic |
+
+Odometer, state of health and max GIDs read as unknown until the car has reported them.
+The server stores 0 or -1 for a field it has never received.
 
 ### Binary sensors
 
-Charge cable, Charging, Quick charging, Charge finish, Climate status, Eco mode, Running.
+Charge cable, Charging, Quick charging, Charge finish, Climate status, Eco mode, Running,
+Battery heater. Battery heater fitted and 6.6kW charger fitted are diagnostic.
 
 ### Controls
 

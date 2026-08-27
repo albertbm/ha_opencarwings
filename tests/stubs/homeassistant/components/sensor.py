@@ -31,3 +31,5 @@ class SensorDeviceClass:
     TIMESTAMP = "timestamp"
     DURATION = "duration"
     DISTANCE = "distance"
+    ENERGY_STORAGE = "energy_storage"
+    ENUM = "enum"

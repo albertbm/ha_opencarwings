@@ -7,7 +7,7 @@ from typing import Any, Callable, Optional
 import logging
 
 from homeassistant.components.sensor import SensorEntity
-from homeassistant.const import ATTR_ATTRIBUTION, PERCENTAGE, UnitOfLength
+from homeassistant.const import ATTR_ATTRIBUTION, PERCENTAGE, UnitOfEnergy, UnitOfLength
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 try:
@@ -136,6 +136,26 @@ def _round_1(v: Any) -> float | None:
     except Exception:
         return None
 
+
+# Gear values as the server stores them.
+CAR_GEAR = {0: "park", 1: "drive", 2: "reverse"}
+
+
+def _gear(v: Any) -> str | None:
+    return CAR_GEAR.get(_to_int(v))
+
+
+def _positive_int(v: Any) -> int | None:
+    """0 and -1 are the server's defaults, not readings from the car."""
+    n = _to_int(v)
+    return n if n is not None and n > 0 else None
+
+
+def _text(v: Any) -> str | None:
+    v = (v or "").strip() if isinstance(v, str) else v
+    return v or None
+
+
 @dataclass(frozen=True)
 class CarSensorSpec:
     key: str
@@ -144,7 +164,10 @@ class CarSensorSpec:
     device_class: Optional[str] = None
     state_class: Optional[str] = None
     unit_of_measurement: Optional[str] = None
+    suggested_unit: Optional[str] = None
     icon: Optional[str] = None
+    options: Optional[tuple[str, ...]] = None
+    diagnostic: bool = False
 
 
 def _to_int(v: Any) -> int | None:
@@ -181,7 +204,7 @@ CAR_SENSORS: list[CarSensorSpec] = [
     CarSensorSpec(
         "odometer",
         lambda car: car.get("odometer"),
-        transform=_to_int,
+        transform=_positive_int,
         device_class=SensorDeviceClass.DISTANCE,
         state_class=SensorStateClass.TOTAL_INCREASING,
         unit_of_measurement=UnitOfLength.KILOMETERS,
@@ -211,6 +234,75 @@ CAR_SENSORS: list[CarSensorSpec] = [
         unit_of_measurement="min",
         icon="mdi:timer-sand",
     ),
+    CarSensorSpec(
+        "soh",
+        _ev_getter("soh"),
+        transform=_positive_int,
+        state_class=SensorStateClass.MEASUREMENT,
+        unit_of_measurement=PERCENTAGE,
+        icon="mdi:battery-heart-variant",
+    ),
+    CarSensorSpec(
+        "wh_content",
+        _ev_getter("wh_content"),
+        transform=_to_float,
+        device_class=SensorDeviceClass.ENERGY_STORAGE,
+        state_class=SensorStateClass.MEASUREMENT,
+        unit_of_measurement=UnitOfEnergy.WATT_HOUR,
+        suggested_unit=UnitOfEnergy.KILO_WATT_HOUR,
+        icon="mdi:battery-charging",
+    ),
+    CarSensorSpec(
+        "gids",
+        _ev_getter("gids"),
+        transform=_to_int,
+        state_class=SensorStateClass.MEASUREMENT,
+        icon="mdi:battery-medium",
+    ),
+    CarSensorSpec(
+        "cap_bars",
+        _ev_getter("cap_bars"),
+        transform=_to_int,
+        state_class=SensorStateClass.MEASUREMENT,
+        icon="mdi:battery-heart-outline",
+    ),
+    CarSensorSpec(
+        "car_gear",
+        _ev_getter("car_gear"),
+        transform=_gear,
+        device_class=SensorDeviceClass.ENUM,
+        options=tuple(CAR_GEAR.values()),
+        icon="mdi:car-shift-pattern",
+    ),
+    CarSensorSpec(
+        "signal_level",
+        lambda car: car.get("signal_level"),
+        transform=_to_int,
+        state_class=SensorStateClass.MEASUREMENT,
+        icon="mdi:signal",
+        diagnostic=True,
+    ),
+    CarSensorSpec(
+        "carrier",
+        lambda car: car.get("carrier"),
+        transform=_text,
+        icon="mdi:sim",
+        diagnostic=True,
+    ),
+    CarSensorSpec(
+        "max_gids",
+        _ev_getter("max_gids"),
+        transform=_positive_int,
+        icon="mdi:battery-high",
+        diagnostic=True,
+    ),
+    CarSensorSpec(
+        "counter",
+        _ev_getter("counter"),
+        transform=_to_int,
+        icon="mdi:counter",
+        diagnostic=True,
+    ),
 ]
 
 
@@ -230,6 +322,12 @@ class CarValueSensor(OpenCarwingsCarEntity, SensorEntity):
             self._attr_icon = spec.icon
         if spec.unit_of_measurement:
             self._attr_native_unit_of_measurement = spec.unit_of_measurement
+        if spec.suggested_unit:
+            self._attr_suggested_unit_of_measurement = spec.suggested_unit
+        if spec.options:
+            self._attr_options = list(spec.options)
+        if spec.diagnostic:
+            self._attr_entity_category = EntityCategory.DIAGNOSTIC
 
     @property
     def native_value(self):

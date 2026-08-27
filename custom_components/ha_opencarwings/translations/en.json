@@ -138,6 +138,38 @@
       },
       "last_requested": {
         "name": "Last requested"
+      },
+      "soh": {
+        "name": "State of health"
+      },
+      "wh_content": {
+        "name": "Battery energy"
+      },
+      "gids": {
+        "name": "GIDs"
+      },
+      "cap_bars": {
+        "name": "Capacity bars"
+      },
+      "car_gear": {
+        "name": "Gear",
+        "state": {
+          "park": "Park",
+          "drive": "Drive",
+          "reverse": "Reverse"
+        }
+      },
+      "signal_level": {
+        "name": "Signal level"
+      },
+      "carrier": {
+        "name": "Carrier"
+      },
+      "max_gids": {
+        "name": "Max GIDs"
+      },
+      "counter": {
+        "name": "Update counter"
       }
     },
     "binary_sensor": {
@@ -161,6 +193,15 @@
       },
       "car_running": {
         "name": "Running"
+      },
+      "batt_heater_status": {
+        "name": "Battery heater"
+      },
+      "batt_heater_avail": {
+        "name": "Battery heater fitted"
+      },
+      "obc_6kw_avail": {
+        "name": "6.6kW charger fitted"
       }
     },
     "switch": {

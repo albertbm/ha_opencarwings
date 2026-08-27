@@ -16,9 +16,10 @@ async def test_sensor_creates_car_entities():
     entry = type("E", (), {"entry_id": "e1"})()
     await sensor_mod.async_setup_entry(hass, entry, add)
 
-    # We expect one CarListSensor plus EV sensors per car (CarSensor removed as redundant)
-    # For two cars: 1 list + 13 per car. The booleans live on the binary_sensor platform.
-    assert len(added) == 27
+    # One CarListSensor, then the specs plus status, last updated, last
+    # requested and VIN for each car. Booleans live on the binary_sensor platform.
+    per_car = len(sensor_mod.CAR_SENSORS) + 4
+    assert len(added) == 1 + 2 * per_car
 
     # verify some unique ids for the new sensors (one example per car)
     unique_ids = [getattr(e, 'unique_id', None) for e in added]

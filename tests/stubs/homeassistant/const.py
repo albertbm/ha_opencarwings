@@ -16,3 +16,8 @@ class UnitOfTemperature:
 class UnitOfLength:
     KILOMETERS = "km"
     MILES = "mi"
+
+
+class UnitOfEnergy:
+    WATT_HOUR = "Wh"
+    KILO_WATT_HOUR = "kWh"
