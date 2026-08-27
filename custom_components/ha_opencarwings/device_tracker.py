@@ -4,19 +4,13 @@ import logging
 from math import asin, cos, radians, sin, sqrt
 from typing import Any
 
-from homeassistant.components.device_tracker import SourceType
+from homeassistant.components.device_tracker import SourceType, TrackerEntity
+
 try:
     from homeassistant.helpers.restore_state import RestoreEntity
 except Exception:  # pragma: no cover - tests running without hass stubs
     class RestoreEntity:  # type: ignore
         """Fallback base class used when RestoreEntity cannot be imported in tests."""
-        pass
-
-try:
-    from homeassistant.components.device_tracker.config_entry import TrackerEntity
-except Exception:  # pragma: no cover - tests running without hass stubs
-    class TrackerEntity:  # type: ignore
-        """Fallback base class used when TrackerEntity cannot be imported in tests."""
         pass
 
 from . import CONF_GPS_MAX_RADIUS_KM, DEFAULT_GPS_MAX_RADIUS_KM, DOMAIN
@@ -225,14 +219,6 @@ class CarTracker(TrackerEntity, RestoreEntity):
     def available(self) -> bool:
         lat, lon = self._get_lat_lon()
         return lat is not None and lon is not None
-
-    @property
-    def location_name(self) -> str | None:
-        car = self._get_car()
-        loc = car.get("last_location") or car.get("location")
-        if isinstance(loc, dict):
-            return loc.get("name") or loc.get("address")
-        return None
 
     @property
     def extra_state_attributes(self) -> dict[str, Any]:

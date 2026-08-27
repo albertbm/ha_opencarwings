@@ -35,3 +35,9 @@ async def test_tracker_handles_various_location_formats():
     # comma as decimal separator should be handled
     assert round(by_vin["VIN4"].latitude, 3) == 53.0
     assert round(by_vin["VIN4"].longitude, 3) == 23.0
+
+def test_tracker_leaves_the_state_to_home_assistant():
+    """Overriding location_name is deprecated, and the API has no name to use."""
+    from custom_components.ha_opencarwings import device_tracker as dt_mod
+
+    assert "location_name" not in vars(dt_mod.CarTracker)
