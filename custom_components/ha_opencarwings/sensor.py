@@ -165,6 +165,7 @@ class CarSensorSpec:
     state_class: Optional[str] = None
     unit_of_measurement: Optional[str] = None
     suggested_unit: Optional[str] = None
+    display_precision: Optional[int] = None
     icon: Optional[str] = None
     options: Optional[tuple[str, ...]] = None
     diagnostic: bool = False
@@ -187,6 +188,7 @@ CAR_SENSORS: list[CarSensorSpec] = [
         device_class=SensorDeviceClass.DISTANCE,
         state_class=SensorStateClass.MEASUREMENT,
         unit_of_measurement=UnitOfLength.KILOMETERS,
+        display_precision=0,
         icon="mdi:map-marker-distance",
     ),
     CarSensorSpec(
@@ -196,6 +198,7 @@ CAR_SENSORS: list[CarSensorSpec] = [
         device_class=SensorDeviceClass.DISTANCE,
         state_class=SensorStateClass.MEASUREMENT,
         unit_of_measurement=UnitOfLength.KILOMETERS,
+        display_precision=0,
         icon="mdi:map-marker-distance",
     ),
     CarSensorSpec("soc", _ev_getter("soc"), transform=_round_1, device_class=SensorDeviceClass.BATTERY, state_class=SensorStateClass.MEASUREMENT, unit_of_measurement=PERCENTAGE),
@@ -208,6 +211,7 @@ CAR_SENSORS: list[CarSensorSpec] = [
         device_class=SensorDeviceClass.DISTANCE,
         state_class=SensorStateClass.TOTAL_INCREASING,
         unit_of_measurement=UnitOfLength.KILOMETERS,
+        display_precision=0,
         icon="mdi:counter",
     ),
     CarSensorSpec(
@@ -324,6 +328,8 @@ class CarValueSensor(OpenCarwingsCarEntity, SensorEntity):
             self._attr_native_unit_of_measurement = spec.unit_of_measurement
         if spec.suggested_unit:
             self._attr_suggested_unit_of_measurement = spec.suggested_unit
+        if spec.display_precision is not None:
+            self._attr_suggested_display_precision = spec.display_precision
         if spec.options:
             self._attr_options = list(spec.options)
         if spec.diagnostic:

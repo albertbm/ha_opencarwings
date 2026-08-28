@@ -95,3 +95,12 @@ async def test_missing_fields_stay_none():
         assert sensors[f"ha_opencarwings_{key}_VIN2"].native_value is None
     for key in ("batt_heater_status", "obc_6kw_avail"):
         assert binaries[f"ha_opencarwings_{key}_VIN2"].is_on is None
+
+
+@pytest.mark.asyncio
+async def test_kilometre_sensors_show_whole_numbers():
+    by_id = await _entities(sensor_mod, CAR)
+
+    for key in ("range_acon", "range_acoff", "odometer"):
+        sensor = by_id[f"ha_opencarwings_{key}_VIN1"]
+        assert sensor.suggested_display_precision == 0

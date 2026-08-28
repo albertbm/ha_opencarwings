@@ -19,6 +19,10 @@ class SensorEntity(Entity):
     def entity_category(self):
         return getattr(self, "_attr_entity_category", None)
 
+    @property
+    def suggested_display_precision(self):
+        return getattr(self, "_attr_suggested_display_precision", None)
+
 
 class SensorStateClass:
     MEASUREMENT = "measurement"
