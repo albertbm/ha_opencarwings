@@ -9,7 +9,8 @@ from opencarwings_client import ApiClient, ApiCommandCreateRequest, CommandRespo
 
 from homeassistant.components.switch import SwitchEntity
 
-from . import DOMAIN, CarData
+from . import DOMAIN
+from .util import CarData
 
 _LOGGER = logging.getLogger(__name__)
 

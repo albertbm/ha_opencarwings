@@ -6,7 +6,7 @@ import asyncio
 from typing import List
 
 import opencarwings_client
-from opencarwings_client import CarSerializerList, ApiException, Car
+from opencarwings_client import CarSerializerList, ApiException
 
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant

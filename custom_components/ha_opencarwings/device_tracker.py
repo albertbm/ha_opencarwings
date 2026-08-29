@@ -11,7 +11,9 @@ except Exception:  # pragma: no cover - tests running without hass stubs
         """Fallback base class used when TrackerEntity cannot be imported in tests."""
         pass
 
-from . import DOMAIN, CarData
+from . import DOMAIN
+from .util import CarData
+
 
 
 async def async_setup_entry(hass, entry, async_add_entities):

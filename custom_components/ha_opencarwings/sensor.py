@@ -25,7 +25,8 @@ except Exception:  # pragma: no cover
         ENERGY = "energy"
         TEMPERATURE = "temperature"
 
-from . import DOMAIN, CarData
+from . import DOMAIN
+from .util import CarData
 
 _LOGGER = logging.getLogger(__name__)
 

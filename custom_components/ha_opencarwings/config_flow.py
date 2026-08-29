@@ -99,7 +99,7 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
 
         current_scan = self.config_entry.options.get("scan_interval", self.config_entry.data.get("scan_interval", DEFAULT_SCAN_INTERVAL_MIN))
         current_api = self.config_entry.options.get("api_base_url", self.config_entry.data.get("api_base_url", DEFAULT_API_BASE))
-        current_api_token = self.config_entry.options.get(CONF_TOKEN, self.config_entry.data.get(CONF_TOKEN))
+        current_api_token = self.config_entry.options.get(CONF_TOKEN, self.config_entry.data.get("api_token"))
         try:
             from homeassistant.helpers import selector
 
