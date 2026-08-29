@@ -32,7 +32,7 @@ DEFAULT_SCAN_INTERVAL_MIN = 15
 class OpenCARWINGSConfigFlow(config_entries.ConfigFlow, domain="ha_opencarwings"):
     """Config flow for OpenCARWINGS."""
 
-    VERSION = 1
+    VERSION = 2
 
     async def async_step_user(self, user_input=None):
         """Handle the initial step where user provides credentials."""
@@ -99,6 +99,7 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
 
         current_scan = self.config_entry.options.get("scan_interval", self.config_entry.data.get("scan_interval", DEFAULT_SCAN_INTERVAL_MIN))
         current_api = self.config_entry.options.get("api_base_url", self.config_entry.data.get("api_base_url", DEFAULT_API_BASE))
+        current_api_token = self.config_entry.options.get(CONF_TOKEN, self.config_entry.data.get(CONF_TOKEN))
         try:
             from homeassistant.helpers import selector
 
@@ -113,6 +114,7 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
         return self.async_show_form(
             step_id="init",
             data_schema=vol.Schema({
+                vol.Required(CONF_TOKEN, default=current_api_token): str,
                 vol.Required("scan_interval", default=current_scan): scan_selector,
                 vol.Required("api_base_url", default=current_api): str,
             }),
