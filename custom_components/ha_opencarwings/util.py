@@ -29,23 +29,24 @@ class CarData:
             }
 
             car_generation = "LEAF ZE0"
-            if not car_instance.vin.startswith("VSK") and hasattr(car_instance, "tcu_ver"):
-                if car_instance.tcu_ver == "06.42":
-                    car_generation = "LEAF AZE0"
-                if car_instance.tcu_ver == "TCU032":
-                    car_generation = "LEAF AZE0 (2016-17)"
-                if car_instance.tcu_ver == "TCU033":
-                    car_generation = "LEAF ZE1"
+            if not car_instance.vin.startswith("VSK"):
+                if isinstance(car_instance, Car):
+                    if car_instance.tcu_ver == "06.42":
+                        car_generation = "LEAF AZE0"
+                    if car_instance.tcu_ver == "TCU032":
+                        car_generation = "LEAF AZE0 (2016-17)"
+                    if car_instance.tcu_ver == "TCU033":
+                        car_generation = "LEAF ZE1"
             else:
                 car_generation = "e-NV200"
-                if hasattr(car_instance, "tcu_ver") and car_instance.tcu_ver == "TCU033":
+                if isinstance(car_instance, Car) and car_instance.tcu_ver == "TCU033":
                     car_generation = "e-NV200 40 kWh"
 
             base_obj["model"] = car_generation
 
-            if hasattr(car_instance, "tcu_model"):
+            if isinstance(car_instance, Car):
                 base_obj["serial_number"] = car_instance.tcu_model
-            if hasattr(car_instance, "tcu_ver"):
+            if isinstance(car_instance, Car):
                 base_obj["sw_version"] = car_instance.tcu_ver
 
             return base_obj
