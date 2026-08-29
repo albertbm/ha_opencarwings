@@ -46,7 +46,8 @@ def _parse_ts(value: str | None):
             except ValueError:
                 return datetime.strptime(value, "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=timezone.utc)
         return datetime.fromisoformat(value)
-    except Exception:
+    except Exception as e:
+        _LOGGER.exception(e)
         return None
 
 

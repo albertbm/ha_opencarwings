@@ -19,7 +19,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     from .api import get_client
     from .util import CarData
     import opencarwings_client
-    from opencarwings_client import CarSerializerList, ApiException
+    from opencarwings_client import CarSerializerList, ApiException, Car
     from typing import List
     import asyncio
     from datetime import timedelta
@@ -52,7 +52,9 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
         cars_api = opencarwings_client.CarsApi(client)
         tasks = []
+        by_vin: dict[str, CarData] = {}
         for c in cars:
+            by_vin[str(c.vin)] = c
             tasks.append(cars_api.api_car_read(str(c.vin)))
 
         if not tasks:
@@ -60,13 +62,8 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
         details = await asyncio.gather(*tasks, return_exceptions=True)
 
-        by_vin: dict[str, CarData] = {}
-        for c in cars:
-            if isinstance(c, CarData) and c.vin:
-                by_vin[str(c.vin)] = c
-
         for d in details:
-            if isinstance(d, Exception) or not isinstance(d, CarData):
+            if isinstance(d, Exception) or not isinstance(d, Car):
                 continue
             vin = d.vin
             if not vin:
