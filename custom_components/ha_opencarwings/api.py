@@ -4,7 +4,7 @@ Provides methods to obtain and refresh JWT tokens and make authenticated request
 """
 from __future__ import annotations
 
-from opencarwings_client.rest import RESTClientObject
+from custom_components.ha_opencarwings.aioclient import RESTClientObject
 
 DEFAULT_API_BASE = "https://opencarwings.viaaq.eu"
 
