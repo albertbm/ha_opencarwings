@@ -4,14 +4,17 @@ Provides methods to obtain and refresh JWT tokens and make authenticated request
 """
 from __future__ import annotations
 
+from opencarwings_client.rest import RESTClientObject
+
 DEFAULT_API_BASE = "https://opencarwings.viaaq.eu"
 
 class AuthenticationError(Exception):
     pass
 
 import opencarwings_client
+from homeassistant.helpers.aiohttp_client import async_get_clientsession
 
-def get_client(base_url: str = DEFAULT_API_BASE, api_token: str | None=None) -> opencarwings_client.ApiClient:
+def get_client(hass, base_url: str = DEFAULT_API_BASE, api_token: str | None=None) -> opencarwings_client.ApiClient:
     configuration = opencarwings_client.Configuration(
         host=base_url
     )
@@ -19,6 +22,11 @@ def get_client(base_url: str = DEFAULT_API_BASE, api_token: str | None=None) -> 
     if api_token is not None and len(api_token) > 0:
         configuration.api_key_prefix['Personal API Key'] = 'Token'
         configuration.api_key['Personal API Key'] = api_token
+
+    session = async_get_clientsession(hass)
+    rest_client = RESTClientObject(configuration, session=session)
+
     client = opencarwings_client.ApiClient(configuration)
+    client.rest_client = rest_client
     client.set_default_header("User-Agent", "OpenCARWINGS-HomeAssistant/1.0")
     return client

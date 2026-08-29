@@ -31,7 +31,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     opts = getattr(entry, "options", {}) or {}
     base_url = opts.get("api_base_url", entry.data.get("api_base_url"))
     api_token = opts.get("api_token", entry.data.get("api_token"))
-    client = get_client(base_url, api_token)
+    client = get_client(hass, base_url, api_token)
 
     # Ensure base_url is accessible on the client instance (helps tests and some clients)
     if base_url:
