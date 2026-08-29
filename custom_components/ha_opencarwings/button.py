@@ -26,8 +26,17 @@ async def async_setup_entry(hass, entry, async_add_entities):
     cars: List[CarData] = data.get("cars", [])
     for car in cars:
         if car.vin:
-            entities.append(CarRefreshButton(entry.entry_id, car))
-            entities.append(CarChargeStartButton(entry.entry_id, car))
+            entities.append(CarRefreshButton(entry.entry_id, car, coordinator=coordinator))
+            entities.append(CarChargeStartButton(entry.entry_id, car, coordinator=coordinator))
+            entities.append(CarChargeStart80Button(entry.entry_id, car, coordinator=coordinator))
+            entities.append(CarDoorLockButton(entry.entry_id, car, coordinator=coordinator))
+            entities.append(CarDoorUnLockButton(entry.entry_id, car, coordinator=coordinator))
+            entities.append(CarHornButton(entry.entry_id, car, coordinator=coordinator))
+            entities.append(CarLightsButton(entry.entry_id, car, coordinator=coordinator))
+            entities.append(CarHornAndLightsButton(entry.entry_id, car, coordinator=coordinator))
+            entities.append(CarStopHornAndLightsButton(entry.entry_id, car, coordinator=coordinator))
+            entities.append(CarRemoteStartButton(entry.entry_id, car, coordinator=coordinator))
+            entities.append(CarRemoteStopButton(entry.entry_id, car, coordinator=coordinator))
 
     # Tests set hass on the entity for direct method calls
     for ent in entities:
@@ -83,13 +92,13 @@ class OpenCarWingsCommandButton(OpenCarwingsButton):
                 command_pin=self._command_pin
             ))
             try:
-                coordinator = self.hass.data[DOMAIN][self._entry_id].get("coordinator")
-                if coordinator:
-                    if self._vin in coordinator.data:
-                        car_curr_data: CarData = coordinator.data[self._vin]
+                if self._coordinator:
+                    if self._vin in self._coordinator.data:
+                        new_data = self._coordinator.data
+                        car_curr_data: CarData = new_data[self._vin]
                         car_curr_data.car_detail = command_result.car
-                        coordinator.data[self._vin] = car_curr_data
-                        await coordinator.async_update()
+                        new_data[self._vin] = car_curr_data
+                        await self._coordinator.async_update(new_data)
             except Exception:  # pragma: no cover - coordinator failure
                 _LOGGER.exception("Failed to update coordinator data after requesting charge start for %s", self._vin)
         except Exception:  # pragma: no cover - network
@@ -229,82 +238,82 @@ class CarHornButton(OpenCarWingsCommandButton):
     def unique_id(self) -> str:
         return f"ha_opencarwings_car_horn_{self._vin}"
 
-    class CarLightsButton(OpenCarWingsCommandButton):
+class CarLightsButton(OpenCarWingsCommandButton):
 
-        def __init__(self, entry_id: str, car: CarData, coordinator=None) -> None:
-            super().__init__(10, entry_id, car, coordinator)
+    def __init__(self, entry_id: str, car: CarData, coordinator=None) -> None:
+        super().__init__(10, entry_id, car, coordinator)
 
-        @property
-        def name(self) -> str:
-            car_instance = self._car.get_latest_car()
-            # Friendly label: prefer car nickname, then model name, then VIN
-            label = (car_instance.nickname or self._vin) if car_instance is not None else self._vin
-            return f"Lights for {label}"
+    @property
+    def name(self) -> str:
+        car_instance = self._car.get_latest_car()
+        # Friendly label: prefer car nickname, then model name, then VIN
+        label = (car_instance.nickname or self._vin) if car_instance is not None else self._vin
+        return f"Lights for {label}"
 
-        @property
-        def unique_id(self) -> str:
-            return f"ha_opencarwings_car_lights_{self._vin}"
+    @property
+    def unique_id(self) -> str:
+        return f"ha_opencarwings_car_lights_{self._vin}"
 
-    class CarHornAndLightsButton(OpenCarWingsCommandButton):
+class CarHornAndLightsButton(OpenCarWingsCommandButton):
 
-        def __init__(self, entry_id: str, car: CarData, coordinator=None) -> None:
-            super().__init__(11, entry_id, car, coordinator)
+    def __init__(self, entry_id: str, car: CarData, coordinator=None) -> None:
+        super().__init__(11, entry_id, car, coordinator)
 
-        @property
-        def name(self) -> str:
-            car_instance = self._car.get_latest_car()
-            # Friendly label: prefer car nickname, then model name, then VIN
-            label = (car_instance.nickname or self._vin) if car_instance is not None else self._vin
-            return f"Horn & Lights for {label}"
+    @property
+    def name(self) -> str:
+        car_instance = self._car.get_latest_car()
+        # Friendly label: prefer car nickname, then model name, then VIN
+        label = (car_instance.nickname or self._vin) if car_instance is not None else self._vin
+        return f"Horn & Lights for {label}"
 
-        @property
-        def unique_id(self) -> str:
-            return f"ha_opencarwings_car_horn_lights_{self._vin}"
+    @property
+    def unique_id(self) -> str:
+        return f"ha_opencarwings_car_horn_lights_{self._vin}"
 
-    class CarStopHornAndLightsButton(OpenCarWingsCommandButton):
+class CarStopHornAndLightsButton(OpenCarWingsCommandButton):
 
-        def __init__(self, entry_id: str, car: CarData, coordinator=None) -> None:
-            super().__init__(12, entry_id, car, coordinator)
+    def __init__(self, entry_id: str, car: CarData, coordinator=None) -> None:
+        super().__init__(12, entry_id, car, coordinator)
 
-        @property
-        def name(self) -> str:
-            car_instance = self._car.get_latest_car()
-            # Friendly label: prefer car nickname, then model name, then VIN
-            label = (car_instance.nickname or self._vin) if car_instance is not None else self._vin
-            return f"Stop Horn & Lights for {label}"
+    @property
+    def name(self) -> str:
+        car_instance = self._car.get_latest_car()
+        # Friendly label: prefer car nickname, then model name, then VIN
+        label = (car_instance.nickname or self._vin) if car_instance is not None else self._vin
+        return f"Stop Horn & Lights for {label}"
 
-        @property
-        def unique_id(self) -> str:
-            return f"ha_opencarwings_car_stop_horn_lights_{self._vin}"
+    @property
+    def unique_id(self) -> str:
+        return f"ha_opencarwings_car_stop_horn_lights_{self._vin}"
 
-    class CarRemoteStartButton(OpenCarWingsCommandButton):
+class CarRemoteStartButton(OpenCarWingsCommandButton):
 
-        def __init__(self, entry_id: str, car: CarData, coordinator=None) -> None:
-            super().__init__(13, entry_id, car, coordinator)
+    def __init__(self, entry_id: str, car: CarData, coordinator=None) -> None:
+        super().__init__(13, entry_id, car, coordinator)
 
-        @property
-        def name(self) -> str:
-            car_instance = self._car.get_latest_car()
-            # Friendly label: prefer car nickname, then model name, then VIN
-            label = (car_instance.nickname or self._vin) if car_instance is not None else self._vin
-            return f"Remote Start for {label}"
+    @property
+    def name(self) -> str:
+        car_instance = self._car.get_latest_car()
+        # Friendly label: prefer car nickname, then model name, then VIN
+        label = (car_instance.nickname or self._vin) if car_instance is not None else self._vin
+        return f"Remote Start for {label}"
 
-        @property
-        def unique_id(self) -> str:
-            return f"ha_opencarwings_car_remote_start_{self._vin}"
+    @property
+    def unique_id(self) -> str:
+        return f"ha_opencarwings_car_remote_start_{self._vin}"
 
-    class CarRemoteStopButton(OpenCarWingsCommandButton):
+class CarRemoteStopButton(OpenCarWingsCommandButton):
 
-        def __init__(self, entry_id: str, car: CarData, coordinator=None) -> None:
-            super().__init__(14, entry_id, car, coordinator)
+    def __init__(self, entry_id: str, car: CarData, coordinator=None) -> None:
+        super().__init__(14, entry_id, car, coordinator)
 
-        @property
-        def name(self) -> str:
-            car_instance = self._car.get_latest_car()
-            # Friendly label: prefer car nickname, then model name, then VIN
-            label = (car_instance.nickname or self._vin) if car_instance is not None else self._vin
-            return f"Remote Stop for {label}"
+    @property
+    def name(self) -> str:
+        car_instance = self._car.get_latest_car()
+        # Friendly label: prefer car nickname, then model name, then VIN
+        label = (car_instance.nickname or self._vin) if car_instance is not None else self._vin
+        return f"Remote Stop for {label}"
 
-        @property
-        def unique_id(self) -> str:
-            return f"ha_opencarwings_car_remote_stop_{self._vin}"
+    @property
+    def unique_id(self) -> str:
+        return f"ha_opencarwings_car_remote_stop_{self._vin}"
