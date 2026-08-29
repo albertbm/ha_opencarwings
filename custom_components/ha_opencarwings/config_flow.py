@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import logging
+
 import opencarwings_client
 from opencarwings_client import AccountDetail
 from opencarwings_client.rest import ApiException
@@ -27,6 +29,7 @@ SCAN_INTERVAL_OPTIONS = [c[0] for c in SCAN_INTERVAL_CHOICES]
 DEFAULT_SCAN_INTERVAL_MIN = 15
 
 # Default API base URL
+_LOGGER = logging.getLogger(__name__)
 
 
 class OpenCARWINGSConfigFlow(config_entries.ConfigFlow, domain="ha_opencarwings"):
@@ -57,11 +60,13 @@ class OpenCARWINGSConfigFlow(config_entries.ConfigFlow, domain="ha_opencarwings"
                         },
                     )
                 except ApiException as err:
+                    _LOGGER.exception(err)
                     if err.status == 401:
                         errors["base"] = "auth"
                     else:
                         errors["base"] = "unknown"
-                except Exception:
+                except Exception as err:
+                    _LOGGER.exception(err)
                     errors["base"] = "unknown"
 
         # Prefer to show a pretty select when Home Assistant's selector helpers
