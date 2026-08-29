@@ -1,7 +1,7 @@
 """Switch platform to control car climate (A/C) as a simple switch."""
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, List
 import logging
 
 import opencarwings_client

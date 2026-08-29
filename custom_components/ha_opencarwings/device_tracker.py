@@ -31,7 +31,7 @@ async def async_setup_entry(hass, entry, async_add_entities):
         cars = getattr(coordinator, "data", None) or cars
 
     # Only create trackers for cars with a VIN
-    entities = [CarTracker(entry.entry_id, car) for car in cars if car.get("vin")]
+    entities = [CarTracker(entry.entry_id, car) for car in cars if car.vin]
     # Tests call entity methods directly; set hass on the entities for testability
     for ent in entities:
         ent.hass = hass
@@ -112,8 +112,11 @@ class CarTracker(TrackerEntity):
             raw_loc = self._car.get("ev_info", {}).get("last_location")
             if raw_loc is not None:
                 raw_src = "ev_info.last_location"
+        latest_car = self._car.get_latest_car()
+        if latest_car is not None:
+            return latest_car.location.to_dict()
 
-        return {**self._car.get_latest_car().to_dict(), "last_location_raw": raw_loc, "last_location_source": raw_src}
+        return {}
 
     @property
     def device_info(self) -> dict[str, Any]:

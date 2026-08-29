@@ -339,8 +339,8 @@ class CarVINSensor(OpenCarwingsCarEntity, SensorEntity):
 
     @property
     def name(self) -> str:
-        car = self._get_car()
-        prefix = car.get("nickname") or car.get("model_name") or "Car"
+        car = self._get_car_dict()
+        prefix = car.get("nickname") or "Car"
         return f"{prefix} VIN"
 
     @property
@@ -359,13 +359,13 @@ class CarLastUpdatedSensor(OpenCarwingsCarEntity, SensorEntity):
 
     @property
     def name(self) -> str:
-        car = self._get_car()
-        prefix = car.get("nickname") or car.get("model_name") or "Car"
+        car = self._get_car_dict()
+        prefix = car.get("nickname")or "Car"
         return f"{prefix} Last Updated"
 
     @property
     def native_value(self) -> str:
-        car = self._get_car()
+        car = self._get_car_dict()
         ev = car.get("ev_info") or {}
         loc = car.get("location") or {}
         ts = ev.get("last_updated") or loc.get("last_updated") or car.get("last_connection")
@@ -386,7 +386,7 @@ class CarLastRequestedSensor(OpenCarwingsCarEntity, SensorEntity):
 
     @property
     def name(self) -> str:
-        car = self._get_car()
+        car = self._get_car_dict()
         prefix = car.get("nickname") or car.get("model_name") or "Car"
         return f"{prefix} Last Requested"
 
