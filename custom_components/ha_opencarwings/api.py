@@ -12,7 +12,6 @@ class AuthenticationError(Exception):
     pass
 
 import opencarwings_client
-from homeassistant.helpers.aiohttp_client import async_get_clientsession
 
 def get_client(hass, base_url: str = DEFAULT_API_BASE, api_token: str | None=None) -> opencarwings_client.ApiClient:
     configuration = opencarwings_client.Configuration(
@@ -23,8 +22,7 @@ def get_client(hass, base_url: str = DEFAULT_API_BASE, api_token: str | None=Non
         configuration.api_key_prefix['Personal API Key'] = 'Token'
         configuration.api_key['Personal API Key'] = api_token
 
-    session = async_get_clientsession(hass)
-    rest_client = RESTClientObject(configuration, session=session)
+    rest_client = RESTClientObject(configuration)
 
     client = opencarwings_client.ApiClient(configuration)
     client.rest_client = rest_client
