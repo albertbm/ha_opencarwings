@@ -64,7 +64,7 @@ class OpenCARWINGSConfigFlow(config_entries.ConfigFlow, domain="ha_opencarwings"
                     if err.status == 401:
                         errors["base"] = "auth"
                     else:
-                        errors["base"] = "unknown"
+                        errors["base"] = err.body
                 except Exception as err:
                     _LOGGER.exception(err)
                     errors["base"] = "unknown"
