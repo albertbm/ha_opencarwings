@@ -1,19 +1,10 @@
 from __future__ import annotations
 
 import logging
-from datetime import timedelta
-import asyncio
-from typing import List
-
-import opencarwings_client
-from opencarwings_client import CarSerializerList, ApiException
 
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
-
-from .api import get_client
-from .util import CarData
 
 DOMAIN = "ha_opencarwings"
 PLATFORMS = ["sensor", "switch", "device_tracker", "button"]
@@ -25,6 +16,14 @@ _LOGGER = logging.getLogger(__name__)
 
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
+    from .api import get_client
+    from .util import CarData
+    import opencarwings_client
+    from opencarwings_client import CarSerializerList, ApiException
+    from typing import List
+    import asyncio
+    from datetime import timedelta
+
     """Set up the OpenCARWINGS integration from a config entry with a DataUpdateCoordinator."""
     hass.data.setdefault(DOMAIN, {})
 
