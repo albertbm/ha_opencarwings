@@ -1,6 +1,8 @@
 from __future__ import annotations
 from typing import Any
 
+from opencarwings_client import CarSerializerList, Car
+
 from homeassistant.components.device_tracker import SourceType
 try:
     from homeassistant.components.device_tracker.config_entry import TrackerEntity
@@ -9,7 +11,8 @@ except Exception:  # pragma: no cover - tests running without hass stubs
         """Fallback base class used when TrackerEntity cannot be imported in tests."""
         pass
 
-from . import DOMAIN
+from . import DOMAIN, CarData
+
 
 async def async_setup_entry(hass, entry, async_add_entities):
     data = hass.data.get(DOMAIN, {}).get(entry.entry_id, {})
@@ -33,15 +36,18 @@ async def async_setup_entry(hass, entry, async_add_entities):
     async_add_entities(entities)
 
 class CarTracker(TrackerEntity):
-    def __init__(self, entry_id: str, car: dict) -> None:
+    def __init__(self, entry_id: str, car: CarData) -> None:
         self._entry_id = entry_id
         self._car = car
-        self._vin = car.get("vin")
+        self._vin = car.vin
 
     @property
     def name(self) -> str:
         # Prefer the car nickname, then model name, then a fallback that includes the VIN
-        return f"{self._car.get('nickname') or self._car.get('model_name') or f'Car {self._vin}'} Tracker"
+        car_instance = self._car.get_latest_car()
+        if car_instance is not None:
+            return f"{car_instance.nickname or f'Car {self._vin}'} Tracker"
+        return f"{self._vin} Tracker"
 
     @property
     def unique_id(self) -> str:
@@ -53,17 +59,11 @@ class CarTracker(TrackerEntity):
 
     def _get_lat_lon(self):
         # Look for various forms of last location in the car data.
-        loc = self._car.get("last_location") or self._car.get("location")
-        if loc is None and isinstance(self._car.get("ev_info"), dict):
-            loc = self._car.get("ev_info", {}).get("last_location")
+        car_instance = self._car.get_latest_car()
 
-        # If the last_location is a list, use the first element.
-        if isinstance(loc, list) and len(loc) > 0:
-            loc = loc[0]
-
-        if isinstance(loc, dict):
-            lat = loc.get("lat") or loc.get("latitude")
-            lon = loc.get("lon") or loc.get("longitude")
+        if car_instance is not None and car_instance.location is not None:
+            lat = car_instance.location.lat
+            lon = car_instance.location.lon
             if lat is not None and lon is not None:
                 # Accept commas as decimal separators ("53,0")
                 try:
@@ -72,6 +72,7 @@ class CarTracker(TrackerEntity):
                     return lat_f, lon_f
                 except Exception:
                     return None, None
+
         return None, None
 
     @property
@@ -89,10 +90,7 @@ class CarTracker(TrackerEntity):
 
     @property
     def location_name(self) -> str | None:
-        # opcjonalnie: pokaże nazwę strefy / opis
-        loc = self._car.get("last_location") or self._car.get("location")
-        if isinstance(loc, dict):
-            return loc.get("name") or loc.get("address")
+        # TODO reverse geolocate address
         return None
 
     @property
@@ -113,15 +111,8 @@ class CarTracker(TrackerEntity):
             if raw_loc is not None:
                 raw_src = "ev_info.last_location"
 
-        return {**self._car, "last_location_raw": raw_loc, "last_location_source": raw_src}
+        return {**self._car.get_latest_car().to_dict(), "last_location_raw": raw_loc, "last_location_source": raw_src}
 
     @property
     def device_info(self) -> dict[str, Any]:
-        # Attach the tracker to the car device so it appears under the same
-        # device as the per-car buttons (use the VIN as the device identifier).
-        return {
-            "identifiers": {(DOMAIN, self._vin)},
-            "name": self._car.get("nickname") or self._car.get("model_name"),
-            "manufacturer": self._car.get("make"),
-            "model": self._car.get("model_name"),
-        }
+        return self._car.car_model_data()

@@ -33,6 +33,10 @@ class DataUpdateCoordinator:
         for listener in list(self._listeners):
             listener()
 
+    async def async_update(self):
+        for listener in list(self._listeners):
+            listener()
+
 
 class CoordinatorEntity:
     """Minimal CoordinatorEntity stub used in tests."""
