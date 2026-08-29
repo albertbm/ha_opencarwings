@@ -100,18 +100,6 @@ class CarTracker(TrackerEntity):
         # Expose VIN and basic car data so it's visible on the entity, and
         # provide the raw last location under a single key for callers that
         # want to inspect the original payload.
-        raw_loc = None
-        raw_src = None
-        if isinstance(self._car.get("last_location"), dict):
-            raw_loc = self._car.get("last_location")
-            raw_src = "last_location"
-        elif isinstance(self._car.get("last_location"), list) and len(self._car.get("last_location")) > 0:
-            raw_loc = self._car.get("last_location")[0]
-            raw_src = "last_location"
-        elif isinstance(self._car.get("ev_info"), dict):
-            raw_loc = self._car.get("ev_info", {}).get("last_location")
-            if raw_loc is not None:
-                raw_src = "ev_info.last_location"
         latest_car = self._car.get_latest_car()
         if latest_car is not None:
             return latest_car.location.to_dict()
