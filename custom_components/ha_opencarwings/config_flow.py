@@ -44,8 +44,8 @@ class OpenCARWINGSConfigFlow(config_entries.ConfigFlow, domain="ha_opencarwings"
             # each user has its own API token
             api_token = user_input[CONF_TOKEN]
             api_base = user_input.get("api_base_url", DEFAULT_API_BASE)
-
-            async with get_client(getattr(self, "hass", None), api_base, api_token) as client:
+            hass = getattr(self, "hass", None)
+            async with await hass.async_add_executor_job(get_client, hass, api_base, api_token) as client:
                 api_instance = opencarwings_client.AccountApi(client)
                 try:
                     account_info: AccountDetail = await api_instance.account_detail_list()
