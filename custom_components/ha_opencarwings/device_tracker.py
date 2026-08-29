@@ -1,9 +1,9 @@
 from __future__ import annotations
+
 from typing import Any
 
-from opencarwings_client import CarSerializerList, Car
-
 from homeassistant.components.device_tracker import SourceType
+
 try:
     from homeassistant.components.device_tracker.config_entry import TrackerEntity
 except Exception:  # pragma: no cover - tests running without hass stubs
