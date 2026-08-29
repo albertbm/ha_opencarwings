@@ -79,7 +79,7 @@ class OpenCarWingsCommandButton(OpenCarwingsButton):
         try:
             command_result: CommandResponse = await cars_api.api_command_create(self._vin, ApiCommandCreateRequest(
                 command_type=self._command_id,
-                command_payload=self.command_payload,
+                command_payload=self._command_payload,
                 command_pin=self._command_pin
             ))
             try:
