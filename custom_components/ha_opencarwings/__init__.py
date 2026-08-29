@@ -99,7 +99,8 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             try:
                 cars = await _enrich_cars_with_details(cars)
             except Exception as err:
-                _LOGGER.debug("Could not enrich car list with details: %s", err)
+                _LOGGER.exception(err)
+                _LOGGER.error("Could not enrich car list with details: %s", err)
 
             # Track the last successful update time for CarLastRequestedSensor
             coordinator.last_update_time = datetime.now(timezone.utc)
