@@ -38,8 +38,8 @@ async def async_setup_entry(hass, entry, async_add_entities):
 class CarRequestedTemperature(OpenCarwingsCarEntity, RestoreEntity, NumberEntity):
     """The temperature sent with the next climate on command.
 
-    The server never reports the car's setpoint back, so this is what was asked
-    for, not what the car has.
+    The server never reports the car's setpoint back, so this holds what was
+    asked for. The car may be doing something else.
     """
 
     _attr_translation_key = "requested_temp"

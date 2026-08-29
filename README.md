@@ -10,8 +10,8 @@
 [![Community Forum][forum-shield]][forum]
 
 Home Assistant integration for the [OpenCARWINGS][opencarwings] server. Each Nissan (or
-compatible) car on your account becomes a device carrying the readings the car uploads
-and the remote commands its TCU accepts.
+compatible) car on your account is a device with the readings the car uploads and the
+remote commands its TCU accepts.
 
 ## Support the project
 
@@ -97,8 +97,8 @@ Two paths, both running at once:
    it writes it, so entities follow the car live.
 2. Polling on your configured interval, as a safety net if the socket drops.
 
-Neither wakes the car. Only a command does that, and the one for this job is the
-per-car **Request data refresh** button.
+Neither wakes the car. Only a command does, and that is the per-car Request data
+refresh button.
 
 The server gives the car up to five minutes to answer a command. The integration
 follows each one in the background and fires
@@ -118,7 +118,7 @@ category "Integration" → Install → restart Home Assistant.
 Copy `custom_components/ha_opencarwings` into `<config>/custom_components/` and restart
 Home Assistant.
 
-Then: Settings → Devices & Services → Add Integration → **OpenCARWINGS**.
+Then: Settings → Devices & Services → Add Integration → OpenCARWINGS.
 
 ## Configuration
 

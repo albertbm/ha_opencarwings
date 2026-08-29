@@ -18,10 +18,9 @@ from .entity import async_add_cars
 
 _LOGGER = logging.getLogger(__name__)
 
-# A head unit on the wrong map region, or with stale map data, can put the car
-# a long way from where it is while the TCU has it right. Fixes beyond the
-# configured radius from Home are dropped and the last good one held. Zero, the
-# default, accepts everything.
+# A head unit on the wrong map region can put the car hundreds of km from where
+# it is. Fixes beyond the configured radius from Home are dropped. Zero accepts
+# everything.
 
 
 def _haversine_km(lat1: float, lon1: float, lat2: float, lon2: float) -> float:

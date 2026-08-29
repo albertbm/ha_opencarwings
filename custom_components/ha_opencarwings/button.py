@@ -41,9 +41,9 @@ class CommandButtonSpec:
     diagnostic: bool = False
 
 
-# Commands 1 and 2 have their own classes below; the paired start/stop ones are
+# Commands 1 and 2 have their own classes below, the paired start/stop ones live
 # in switch.py, and 15 needs a payload no plain button can supply. Lock and
-# unlock stay buttons because the TCU never reports door state.
+# unlock stay buttons: the TCU never reports door state.
 COMMAND_BUTTONS: tuple[CommandButtonSpec, ...] = (
     CommandButtonSpec(CMD_DOOR_LOCK, "lock", "lock the doors", "mdi:car-door-lock"),
     CommandButtonSpec(CMD_DOOR_UNLOCK, "unlock", "unlock the doors", "mdi:car-door-lock-open"),
