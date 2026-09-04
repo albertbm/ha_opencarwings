@@ -22,7 +22,7 @@ async def test_battery_and_location_and_switch_creation(monkeypatch):
     # requested and VIN for the car.
     # One list sensor, then every spec plus status, last updated, last
     # requested, VIN and fault codes.
-    assert len(added) == 1 + len(sensor_mod.CAR_SENSORS) + 4
+    assert len(added) == 1 + len(sensor_mod.CAR_SENSORS) + 5
 
     # new EV sensors
     def _val(e):

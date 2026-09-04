@@ -26,6 +26,8 @@ class CarBinarySensorSpec:
     device_class: Optional[str] = None
     icon: Optional[str] = None
     diagnostic: bool = False
+    # Read from the vehicle health report instead of ev_info.
+    from_health: bool = False
 
 
 CAR_BINARY_SENSORS: tuple[CarBinarySensorSpec, ...] = (
@@ -45,6 +47,10 @@ CAR_BINARY_SENSORS: tuple[CarBinarySensorSpec, ...] = (
     CarBinarySensorSpec("batt_heater_avail", icon="mdi:radiator-disabled",
                         diagnostic=True),
     CarBinarySensorSpec("obc_6kw_avail", icon="mdi:flash", diagnostic=True),
+    CarBinarySensorSpec("tpms_light", BinarySensorDeviceClass.PROBLEM,
+                        "mdi:car-tire-alert", from_health=True),
+    CarBinarySensorSpec("maintenance_alert", BinarySensorDeviceClass.PROBLEM,
+                        "mdi:car-wrench", from_health=True),
 )
 
 
@@ -61,7 +67,7 @@ async def async_setup_entry(hass, entry, async_add_entities):
 
 
 class CarBinarySensor(OpenCarwingsCarEntity, BinarySensorEntity):
-    """One boolean from the car's ev_info."""
+    """One boolean from the car's ev_info or its health report."""
 
     def __init__(self, coordinator, entry_id: str, vin: str,
                  spec: CarBinarySensorSpec, seed_car: CarData | None = None) -> None:
@@ -78,5 +84,6 @@ class CarBinarySensor(OpenCarwingsCarEntity, BinarySensorEntity):
 
     @property
     def is_on(self) -> bool | None:
-        value = self._get_ev_dict().get(self._spec.key)
+        source = "veh_health" if self._spec.from_health else "ev_info"
+        value = (self._get_car_dict().get(source) or {}).get(self._spec.key)
         return None if value is None else bool(value)

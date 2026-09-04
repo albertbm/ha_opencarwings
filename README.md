@@ -44,10 +44,13 @@ as the device's firmware version and serial number.
 | Capacity bars | The dashboard's capacity bars, out of 12 |
 | Gear | `park`, `drive` or `reverse` |
 | Status | One of `charging`, `running`, `ac_on`, `idle` |
+| Tyre pressure, front left / front right / rear left / rear right | kPa |
+| Fault codes | How many codes the car is storing, with the codes as attributes. Diagnostic |
 | VIN | Diagnostic |
 | Last updated | When the car last reported. Diagnostic |
 | Last requested | When a command was last sent to the car. Diagnostic |
 | Signal level, Carrier | The TCU's mobile connection. Diagnostic |
+| TCU type | `continental2012` or `ficosa2016`. Diagnostic |
 | Max GIDs, Update counter | Diagnostic |
 
 Odometer, state of health and max GIDs read as unknown until the car has reported them.
@@ -57,6 +60,8 @@ The server stores 0 or -1 for a field it has never received.
 
 Charge cable, Charging, Quick charging, Charge finish, Climate status, Eco mode, Running,
 Battery heater. Battery heater fitted and 6.6kW charger fitted are diagnostic.
+
+Tyre pressure warning and Service due come from the vehicle health report.
 
 ### Controls
 
@@ -94,6 +99,8 @@ knows what the car's TCU uploads.
   payload.
 - Every entity is created for every car, matching what the server's own page shows. What
   a car does not report reads as unknown rather than disappearing.
+- Only the Ficosa TCU uploads a vehicle health report. On other cars those entities stay
+  unknown.
 
 ## How it stays up to date
 

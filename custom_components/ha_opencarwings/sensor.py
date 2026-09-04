@@ -12,6 +12,7 @@ from homeassistant.const import (
     PERCENTAGE,
     UnitOfEnergy,
     UnitOfLength,
+    UnitOfPressure,
 )
 
 try:
@@ -114,6 +115,13 @@ def _ev_getter(key: str, fallback: str | None = None) -> Callable[[CarData], Any
         return car.get(key)
     return _get
 
+def _health_getter(key: str) -> Callable[[CarData], Any]:
+    """Read a field out of the vehicle health report."""
+    def _get(car: CarData):
+        return (_flat(car).get("veh_health") or {}).get(key)
+    return _get
+
+
 def _to_float(v: Any) -> float | None:
     if v is None:
         return None
@@ -140,6 +148,39 @@ def _chg_minutes(v: Any) -> int | None:
     return minutes
 
 
+def _code_list(v: Any) -> list[str]:
+    """Fault codes as readable strings.
+
+    The server sends one entry per affected ECU, with the decoded code.
+    """
+    if not v:
+        return []
+    if isinstance(v, dict):
+        v = list(v.values())
+    if not isinstance(v, (list, tuple)):
+        v = [v]
+
+    codes = []
+    for entry in v:
+        if isinstance(entry, dict):
+            code = entry.get("code_label") or entry.get("code")
+            ecu = entry.get("ecu_label")
+            if not code:
+                continue
+            codes.append(f"{code} ({ecu})" if ecu else str(code))
+        elif entry:
+            codes.append(str(entry))
+    return codes
+
+
+def _tyre_pressure(v: Any) -> int | None:
+    """Tyre pressure in kPa. The server sends 0 for a wheel it has no reading for."""
+    kpa = _to_int(v)
+    if kpa is None or kpa <= 0:
+        return None
+    return kpa
+
+
 def _round_1(v: Any) -> float | None:
     if v is None:
         return None
@@ -151,6 +192,9 @@ def _round_1(v: Any) -> float | None:
 
 # Gear values as the server stores them.
 CAR_GEAR = {0: "park", 1: "drive", 2: "reverse"}
+
+# The two telematics units Nissan shipped.
+TCU_TYPES = ("continental2012", "ficosa2016")
 
 
 def _gear(v: Any) -> str | None:
@@ -319,6 +363,55 @@ CAR_SENSORS: list[CarSensorSpec] = [
         icon="mdi:counter",
         diagnostic=True,
     ),
+    CarSensorSpec(
+        "tpms_fl",
+        _health_getter("tpms_fl"),
+        transform=_tyre_pressure,
+        device_class=SensorDeviceClass.PRESSURE,
+        state_class=SensorStateClass.MEASUREMENT,
+        unit_of_measurement=UnitOfPressure.KPA,
+        display_precision=0,
+        icon="mdi:car-tire-alert",
+    ),
+    CarSensorSpec(
+        "tpms_fr",
+        _health_getter("tpms_fr"),
+        transform=_tyre_pressure,
+        device_class=SensorDeviceClass.PRESSURE,
+        state_class=SensorStateClass.MEASUREMENT,
+        unit_of_measurement=UnitOfPressure.KPA,
+        display_precision=0,
+        icon="mdi:car-tire-alert",
+    ),
+    CarSensorSpec(
+        "tpms_rl",
+        _health_getter("tpms_rl"),
+        transform=_tyre_pressure,
+        device_class=SensorDeviceClass.PRESSURE,
+        state_class=SensorStateClass.MEASUREMENT,
+        unit_of_measurement=UnitOfPressure.KPA,
+        display_precision=0,
+        icon="mdi:car-tire-alert",
+    ),
+    CarSensorSpec(
+        "tpms_rr",
+        _health_getter("tpms_rr"),
+        transform=_tyre_pressure,
+        device_class=SensorDeviceClass.PRESSURE,
+        state_class=SensorStateClass.MEASUREMENT,
+        unit_of_measurement=UnitOfPressure.KPA,
+        display_precision=0,
+        icon="mdi:car-tire-alert",
+    ),
+    CarSensorSpec(
+        "tcu_type",
+        lambda car: _flat(car).get("tcu_type"),
+        transform=_text,
+        device_class=SensorDeviceClass.ENUM,
+        options=TCU_TYPES,
+        icon="mdi:chip",
+        diagnostic=True,
+    ),
 ]
 
 
@@ -476,6 +569,40 @@ class CarLastRequestedSensor(OpenCarwingsCarEntity, SensorEntity):
         }
 
 
+class CarDiagnosticTroubleCodesSensor(OpenCarwingsCarEntity, SensorEntity):
+    """How many fault codes the car is storing, with the codes as attributes."""
+
+    _attr_icon = "mdi:car-wrench"
+    _attr_entity_category = EntityCategory.DIAGNOSTIC
+    _attr_state_class = SensorStateClass.MEASUREMENT
+
+    def __init__(self, coordinator, entry_id: str, vin: str, seed_car: CarData | None = None) -> None:
+        super().__init__(coordinator, entry_id, vin, seed_car)
+        self._attr_unique_id = f"ha_opencarwings_dtc_{vin}"
+        self._attr_translation_key = "dtc"
+
+    def _health(self) -> dict:
+        return self._get_car_dict().get("veh_health") or {}
+
+    @property
+    def native_value(self) -> int | None:
+        health = self._health()
+        if not health:
+            return None
+        return len(_code_list(health.get("dtc_short"))) + len(_code_list(health.get("dtc_long")))
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any]:
+        health = self._health()
+        ts = _ensure_aware(_parse_ts(health.get("dtc_timestamp")))
+        return {
+            "short_codes": _code_list(health.get("dtc_short")),
+            "long_codes": _code_list(health.get("dtc_long")),
+            "read_at": _format_dt(ts),
+            "report_updated": health.get("last_updated"),
+        }
+
+
 class CarListSensor(SensorEntity):
     """How many cars this account has."""
 
@@ -527,6 +654,9 @@ async def async_setup_entry(hass, entry, async_add_entities):
         entities.append(CarLastUpdatedSensor(coordinator, entry.entry_id, vin, seed_car=car))
         entities.append(CarLastRequestedSensor(coordinator, entry.entry_id, vin, seed_car=car))
         entities.append(CarVINSensor(coordinator, entry.entry_id, vin, seed_car=car))
+        entities.append(
+            CarDiagnosticTroubleCodesSensor(coordinator, entry.entry_id, vin, seed_car=car)
+        )
         return entities
 
     async_add_cars(hass, entry, async_add_entities, _build)

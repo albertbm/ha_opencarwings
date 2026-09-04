@@ -1,6 +1,25 @@
-from opencarwings_client import Car, CarSerializerList
+from typing import Optional, Union
+
+from opencarwings_client import Car, CarSerializerList, VehicleHealthInfo
 
 from . import DOMAIN
+
+
+def _relax_dtc_fields() -> None:
+    """The server sends dtc_short and dtc_long as lists, the model wants dicts.
+
+    Without this any car with a health report fails to parse. Reported upstream.
+    """
+    for name in ("dtc_short", "dtc_long"):
+        field = VehicleHealthInfo.model_fields.get(name)
+        if field is not None:
+            field.annotation = Optional[Union[dict, list]]
+    # Car embeds it, so rebuild that too.
+    for model in (VehicleHealthInfo, Car, CarSerializerList):
+        model.model_rebuild(force=True)
+
+
+_relax_dtc_fields()
 
 # The TCU version tells the generations apart; the VIN prefix picks car or van.
 TCU_GENERATIONS = {

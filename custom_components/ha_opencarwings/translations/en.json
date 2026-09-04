@@ -170,6 +170,28 @@
       },
       "counter": {
         "name": "Update counter"
+      },
+      "tpms_fl": {
+        "name": "Tyre pressure front left"
+      },
+      "tpms_fr": {
+        "name": "Tyre pressure front right"
+      },
+      "tpms_rl": {
+        "name": "Tyre pressure rear left"
+      },
+      "tpms_rr": {
+        "name": "Tyre pressure rear right"
+      },
+      "dtc": {
+        "name": "Fault codes"
+      },
+      "tcu_type": {
+        "name": "TCU type",
+        "state": {
+          "continental2012": "Continental (2012)",
+          "ficosa2016": "Ficosa (2016)"
+        }
       }
     },
     "binary_sensor": {
@@ -202,6 +224,12 @@
       },
       "obc_6kw_avail": {
         "name": "6.6kW charger fitted"
+      },
+      "tpms_light": {
+        "name": "Tyre pressure warning"
+      },
+      "maintenance_alert": {
+        "name": "Service due"
       }
     },
     "switch": {

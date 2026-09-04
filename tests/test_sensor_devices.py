@@ -20,7 +20,7 @@ async def test_sensor_creates_car_entities():
 
     # One CarListSensor, then the specs plus status, last updated, last
     # requested and VIN for each car. Booleans live on the binary_sensor platform.
-    per_car = len(sensor_mod.CAR_SENSORS) + 4
+    per_car = len(sensor_mod.CAR_SENSORS) + 5
     assert len(added) == 1 + 2 * per_car
 
     # verify some unique ids for the new sensors (one example per car)

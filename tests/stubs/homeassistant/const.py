@@ -13,6 +13,12 @@ class UnitOfTemperature:
     FAHRENHEIT = "°F"
 
 
+class UnitOfPressure:
+    KPA = "kPa"
+    BAR = "bar"
+    PSI = "psi"
+
+
 class UnitOfLength:
     KILOMETERS = "km"
     MILES = "mi"

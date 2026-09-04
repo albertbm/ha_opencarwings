@@ -5,6 +5,7 @@ class BinarySensorDeviceClass:
     BATTERY_CHARGING = "battery_charging"
     PLUG = "plug"
     RUNNING = "running"
+    PROBLEM = "problem"
 
 
 class BinarySensorEntity(Entity):
