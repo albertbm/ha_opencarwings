@@ -24,6 +24,10 @@ One device per car. Entity IDs are built from the car's nickname, so a car calle
 "DKL" gets `sensor.dkl_odometer`, `switch.dkl_climate`, and so on. Add a car to the
 account and its entities appear on the next poll or push, without a restart.
 
+The device model comes from the TCU firmware version: Leaf ZE0, Leaf AZE0, Leaf AZE0
+(2016-2017), Leaf ZE1, e-NV200 or e-NV200 40 kWh. The TCU firmware and serial show up
+as the device's firmware version and serial number.
+
 ### Sensors
 
 | Entity | Notes |

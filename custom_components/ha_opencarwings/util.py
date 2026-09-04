@@ -2,6 +2,14 @@ from opencarwings_client import Car, CarSerializerList
 
 from . import DOMAIN
 
+# The TCU version tells the generations apart; the VIN prefix picks car or van.
+TCU_GENERATIONS = {
+    "06.42": "LEAF AZE0",
+    "TCU032": "LEAF AZE0 (2016-17)",
+    "TCU033": "LEAF ZE1",
+}
+ENV200_GENERATIONS = {"TCU033": "e-NV200 40 kWh"}
+
 
 class CarData:
     vin: str
@@ -76,23 +84,17 @@ class CarData:
             car_generation = "LEAF ZE0"
             if not car_instance.vin.startswith("VSK"):
                 if isinstance(car_instance, Car):
-                    if car_instance.tcu_ver == "06.42":
-                        car_generation = "LEAF AZE0"
-                    if car_instance.tcu_ver == "TCU032":
-                        car_generation = "LEAF AZE0 (2016-17)"
-                    if car_instance.tcu_ver == "TCU033":
-                        car_generation = "LEAF ZE1"
+                    car_generation = TCU_GENERATIONS.get(car_instance.tcu_ver, car_generation)
             else:
                 car_generation = "e-NV200"
-                if isinstance(car_instance, Car) and car_instance.tcu_ver == "TCU033":
-                    car_generation = "e-NV200 40 kWh"
+                if isinstance(car_instance, Car):
+                    car_generation = ENV200_GENERATIONS.get(car_instance.tcu_ver, car_generation)
 
             base_obj["model"] = car_generation
 
             if isinstance(car_instance, Car):
                 base_obj["serial_number"] = car_instance.tcu_model
-            if isinstance(car_instance, Car):
-                base_obj["sw_version"] = car_instance.tcu_ver
+                base_obj["sw_version"] = car_instance.tcu_version
 
             return base_obj
         return {
