@@ -1,5 +1,7 @@
 import pytest
 
+from conftest import make_car
+
 from custom_components.ha_opencarwings import switch as switch_mod
 from custom_components.ha_opencarwings.commands import CMD_AC_ON
 
@@ -14,8 +16,7 @@ class FakeCoordinator:
 
 
 def _car(ac_status):
-    return {"vin": "VIN1", "nickname": "DKL", "model_name": "Leaf",
-            "ev_info": {"id": 1, "ac_status": ac_status}}
+    return make_car(vin="VIN1", nickname="DKL", ev_info={"id": 1, "ac_status": ac_status})
 
 
 def _switch(ac_status):
@@ -32,8 +33,8 @@ def test_reports_server_status():
 
 
 def test_unknown_without_ev_info():
-    coordinator = FakeCoordinator([{"vin": "VIN1"}])
-    sw = switch_mod.CarClimateSwitch(coordinator, "e1", {"vin": "VIN1"})
+    coordinator = FakeCoordinator([make_car(vin="VIN1")])
+    sw = switch_mod.CarClimateSwitch(coordinator, "e1", make_car(vin="VIN1"))
     assert sw.is_on is None
 
 
@@ -73,7 +74,6 @@ async def test_finished_command_drops_the_guess(monkeypatch):
     await sw.async_turn_on()
     assert sw.is_on is True
 
-    event = type("E", (), {"data": {"vin": "VIN1", "command_type": CMD_AC_ON,
-                                    "result": "timeout"}})()
+    event = type("E", (), {"data": {"vin": "VIN1", "command_type": CMD_AC_ON, "result": "timeout"}})()
     sw._command_finished(event)
     assert sw.is_on is False

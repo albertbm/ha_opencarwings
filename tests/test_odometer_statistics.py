@@ -1,12 +1,14 @@
 import pytest
 
+from conftest import make_car
+
 from custom_components.ha_opencarwings import sensor as sensor_mod
 
 
 @pytest.mark.asyncio
 async def test_odometer_is_recorded_as_a_total():
     hass = type("H", (), {"data": {"ha_opencarwings": {"e1": {"cars": [
-        {"vin": "VIN1", "nickname": "DKL", "odometer": 102592}]}}}})()
+        make_car(vin="VIN1", nickname="DKL", odometer=102592)]}}}})()
     entry = type("E", (), {"entry_id": "e1"})()
     added = []
     await sensor_mod.async_setup_entry(hass, entry, added.extend)

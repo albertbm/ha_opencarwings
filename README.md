@@ -88,6 +88,8 @@ knows what the car's TCU uploads.
   assumed-state toggles holding the last command sent.
 - Sending a temperature needs a Ficosa 2016 TCU. Older Continental units reject the
   payload.
+- Every entity is created for every car, matching what the server's own page shows. What
+  a car does not report reads as unknown rather than disappearing.
 
 ## How it stays up to date
 

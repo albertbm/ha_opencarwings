@@ -1,6 +1,7 @@
 import pytest
 
 import custom_components.ha_opencarwings as init_mod
+from conftest import run_executor, stub_client
 
 
 class ServicesStub:
@@ -37,27 +38,21 @@ async def test_refresh_service_for_entry(monkeypatch):
             return None
 
     hass = type("H", (), {"data": {"ha_opencarwings": {"e1": {"coordinator": coord}}}, "services": ServicesStub(), "config_entries": C()})()
-
-    # Monkeypatch API client to avoid real network calls during setup
-    class FakeAPI:
-        def __init__(self, hass, base_url=None):
-            pass
-
-        async def async_get_cars(self):
-            return []
-
-        def set_api_key(self, api_key):
-            return
+    hass.async_add_executor_job = run_executor
 
     class FakeCoordinatorClass:
         def __init__(self, hass, logger, name, update_method, update_interval=None):
             self.called = False
             self.update_method = update_method
+            self.data = []
+
+        async def async_config_entry_first_refresh(self):
+            self.data = await self.update_method()
 
         async def async_request_refresh(self):
             self.called = True
 
-    monkeypatch.setattr(init_mod, "OpenCarWingsAPI", FakeAPI)
+    stub_client(monkeypatch)
     monkeypatch.setattr(init_mod, "DataUpdateCoordinator", FakeCoordinatorClass)
 
     entry = type("E", (), {"entry_id": "e1", "title": "e1", "data": {"api_key": "k"}})()
@@ -90,27 +85,21 @@ async def test_refresh_service_refreshes_all(monkeypatch):
             return None
 
     hass = type("H", (), {"data": {"ha_opencarwings": {"e1": {"coordinator": c1}, "e2": {"coordinator": c2}}}, "services": ServicesStub(), "config_entries": C()})()
-
-    # Monkeypatch API client to avoid real network calls during setup
-    class FakeAPI:
-        def __init__(self, hass, base_url=None):
-            pass
-
-        async def async_get_cars(self):
-            return []
-
-        def set_api_key(self, api_key):
-            return
+    hass.async_add_executor_job = run_executor
 
     class FakeCoordinatorClass:
         def __init__(self, hass, logger, name, update_method, update_interval=None):
             self.called = False
             self.update_method = update_method
+            self.data = []
+
+        async def async_config_entry_first_refresh(self):
+            self.data = await self.update_method()
 
         async def async_request_refresh(self):
             self.called = True
 
-    monkeypatch.setattr(init_mod, "OpenCarWingsAPI", FakeAPI)
+    stub_client(monkeypatch)
     monkeypatch.setattr(init_mod, "DataUpdateCoordinator", FakeCoordinatorClass)
 
     entry = type("E", (), {"entry_id": "e1", "title": "e1", "data": {"api_key": "k"}})()

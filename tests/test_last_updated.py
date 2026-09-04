@@ -1,4 +1,6 @@
 import pytest
+
+from conftest import make_car
 from datetime import datetime, timezone
 
 from custom_components.ha_opencarwings import sensor as sensor_mod
@@ -12,16 +14,14 @@ async def test_last_updated_sensor_reports_latest_timestamp_per_car():
     coordinator = type("C", (), {
         "last_update_time": datetime(2026, 1, 4, 14, 0, 0, tzinfo=timezone.utc), 
         "data": [
-            {"vin": "VIN1", "ev_info": {"last_updated": "2026-01-04T12:00:00Z"}, "location": {"last_updated": "2026-01-04T11:00:00Z"},
-             "command_request_time": "2026-01-04T14:00:00Z", "command_type_display": "Refresh data",
-             "command_result_display": "Success"},
-            {"vin": "VIN2", "ev_info": {"last_updated": latest}}
+            make_car(vin="VIN1", ev_info={"last_updated": "2026-01-04T12:00:00Z"}, location={"last_updated": "2026-01-04T11:00:00Z"}, command_request_time="2026-01-04T14:00:00Z", command_type_display="Refresh data", command_result_display="Success"),
+            make_car(vin="VIN2", ev_info={"last_updated": latest})
         ]
     })()
 
     hass = type("H", (), {"data": {"ha_opencarwings": {"e1": {"cars": [
-        {"vin": "VIN1", "ev_info": {"last_updated": "2026-01-04T12:00:00Z"}, "location": {"last_updated": "2026-01-04T11:00:00Z"}},
-        {"vin": "VIN2", "ev_info": {"last_updated": latest}}
+        make_car(vin="VIN1", ev_info={"last_updated": "2026-01-04T12:00:00Z"}, location={"last_updated": "2026-01-04T11:00:00Z"}),
+        make_car(vin="VIN2", ev_info={"last_updated": latest})
     ], "coordinator": coordinator}}}})()
 
     # Capture added entities
@@ -59,7 +59,7 @@ async def test_last_updated_sensor_reports_latest_timestamp_per_car():
 
 @pytest.mark.asyncio
 async def test_last_requested_sensor_unknown_without_coordinator():
-    hass = type("H", (), {"data": {"ha_opencarwings": {"e1": {"cars": [{"vin": "VIN1", "ev_info": {"last_updated": "2026-01-04T12:00:00Z"}}]}}}})()
+    hass = type("H", (), {"data": {"ha_opencarwings": {"e1": {"cars": [make_car(vin="VIN1", ev_info={"last_updated": "2026-01-04T12:00:00Z"})]}}}})()
 
     # Capture added entities
     added = []
@@ -85,12 +85,12 @@ async def test_last_updated_sensor_parses_timestamps_with_microseconds():
     coordinator = type("C", (), {
         "last_update_time": datetime(2026, 1, 5, 0, 16, 10, tzinfo=timezone.utc), 
         "data": [
-            {"vin": "VIN1", "ev_info": {"last_updated": ts_with_microseconds}, "location": {"last_updated": "2026-01-05T00:16:10.410231Z"}}
+            make_car(vin="VIN1", ev_info={"last_updated": ts_with_microseconds}, location={"last_updated": "2026-01-05T00:16:10.410231Z"})
         ]
     })()
 
     hass = type("H", (), {"data": {"ha_opencarwings": {"e1": {"cars": [
-        {"vin": "VIN1", "ev_info": {"last_updated": ts_with_microseconds}, "location": {"last_updated": "2026-01-05T00:16:10.410231Z"}}
+        make_car(vin="VIN1", ev_info={"last_updated": ts_with_microseconds}, location={"last_updated": "2026-01-05T00:16:10.410231Z"})
     ], "coordinator": coordinator}}}})()
 
     # Capture added entities

@@ -7,6 +7,7 @@ from homeassistant.core import callback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from . import DOMAIN
+from .util import CarData
 
 
 @callback
@@ -25,7 +26,7 @@ def async_add_cars(hass, entry, async_add_entities, build) -> None:
         cars = getattr(coordinator, "data", None) or data.get("cars", [])
         entities = []
         for car in cars:
-            vin = car.get("vin")
+            vin = car.vin
             if not vin or vin in seen:
                 continue
             seen.add(vin)
@@ -49,33 +50,29 @@ def async_add_cars(hass, entry, async_add_entities, build) -> None:
 
 
 class OpenCarwingsCarEntity(CoordinatorEntity):
-    """One car, identified by VIN.
-
-    Seed data from setup is merged under the coordinator payload so fields the
-    poll leaves out do not disappear.
-    """
+    """One car, identified by VIN."""
 
     _attr_has_entity_name = True
 
-    def __init__(self, coordinator, entry_id: str, vin: str, seed_car: dict | None = None) -> None:
+    def __init__(self, coordinator, entry_id: str, vin: str, seed_car: CarData | None = None) -> None:
         super().__init__(coordinator)
         self._entry_id = entry_id
         self._vin = vin
-        self._seed_car = seed_car or {}
+        self._seed_car = seed_car
 
-    def _get_car(self) -> dict:
+    def _get_car(self) -> CarData:
         if self.coordinator and getattr(self.coordinator, "data", None):
-            for car in self.coordinator.data:
-                if car.get("vin") == self._vin:
-                    return {**self._seed_car, **(car or {})}
-        return self._seed_car or {}
+            for c in self.coordinator.data:
+                if c.vin == self._vin:
+                    return c
+        return self._seed_car or CarData(self._vin)
+
+    def _get_car_dict(self) -> dict:
+        return self._get_car().as_dict()
+
+    def _get_ev_dict(self) -> dict:
+        return self._get_car_dict().get("ev_info") or {}
 
     @property
     def device_info(self) -> dict[str, Any]:
-        car = self._get_car()
-        return {
-            "identifiers": {(DOMAIN, self._vin)},
-            "name": car.get("nickname") or car.get("model_name") or "Car",
-            "manufacturer": car.get("make") or "Nissan",
-            "model": car.get("model_name") or "Leaf",
-        }
+        return self._get_car().car_model_data()

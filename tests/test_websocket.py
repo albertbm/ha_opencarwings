@@ -1,5 +1,7 @@
 import pytest
 
+from conftest import make_car
+
 from custom_components.ha_opencarwings import websocket as ws
 
 
@@ -10,35 +12,40 @@ def test_socket_url_follows_the_scheme():
 
 
 def _cars():
-    return [{
-        "vin": "VIN1",
-        "nickname": "DKL",
-        "ev_info": {"id": 1, "soc": 50.0, "ac_status": False},
-        "location": {"id": 1, "lat": "64.1", "lon": "-21.8"},
-    }]
+    return [make_car(vin="VIN1", nickname="DKL", ev_info={"id": 1, "soc": 50.0, "ac_status": False}, location={"id": 1, "lat": "64.1", "lon": "-21.8"})]
+
+
+def _flat(car):
+    return car.get_latest_car().to_dict()
 
 
 def test_a_car_push_merges_onto_the_existing_car():
     out = ws.apply_message(_cars(), {"type": "car", "data": {"vin": "VIN1", "odometer": 102600}})
-    assert out[0]["odometer"] == 102600
+    assert _flat(out[0])["odometer"] == 102600
     # Fields the push does not mention survive.
-    assert out[0]["nickname"] == "DKL"
+    assert _flat(out[0])["nickname"] == "DKL"
 
 
 def test_an_unknown_vin_is_added():
-    out = ws.apply_message(_cars(), {"type": "car", "data": {"vin": "VIN2"}})
-    assert [c["vin"] for c in out] == ["VIN1", "VIN2"]
+    push = _flat(make_car(vin="VIN2", nickname="Other"))
+    out = ws.apply_message(_cars(), {"type": "car", "data": push})
+    assert [c.vin for c in out] == ["VIN1", "VIN2"]
+
+
+def test_a_car_push_we_cannot_parse_is_ignored():
+    assert ws.apply_message(_cars(), {"type": "car", "data": {"vin": "VIN2"}}) is None
 
 
 def test_ev_info_is_matched_by_its_own_id():
     out = ws.apply_message(_cars(), {"type": "ev_info", "data": {"id": 1, "ac_status": True}})
-    assert out[0]["ev_info"]["ac_status"] is True
-    assert out[0]["ev_info"]["soc"] == 50.0
+    ev = _flat(out[0])["ev_info"]
+    assert ev["ac_status"] is True
+    assert ev["soc"] == 50.0
 
 
 def test_location_is_matched_by_its_own_id():
     out = ws.apply_message(_cars(), {"type": "location", "data": {"id": 1, "lat": "66.3"}})
-    assert out[0]["location"]["lat"] == "66.3"
+    assert _flat(out[0])["location"]["lat"] == "66.3"
 
 
 def test_a_nested_object_for_an_unknown_car_changes_nothing():
@@ -85,7 +92,7 @@ def test_a_push_reaches_the_coordinator():
 
     sock._handle({"type": "ev_info", "data": {"id": 1, "soc": 61.5}})
 
-    assert coord.pushed[0]["ev_info"]["soc"] == 61.5
+    assert _flat(coord.pushed[0])["ev_info"]["soc"] == 61.5
 
 
 def test_alerts_become_events_not_state():

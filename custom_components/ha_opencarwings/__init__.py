@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import logging
 from datetime import timedelta
-import asyncio
 
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
@@ -25,8 +24,6 @@ try:
 except ImportError:  # pragma: no cover - older stubs
     CONF_API_KEY = "api_key"
 
-from .api import OpenCarWingsAPI, AuthenticationError, RequestError
-
 DOMAIN = "ha_opencarwings"
 
 # Config entry keys shared by the config flow and the platforms.
@@ -42,108 +39,36 @@ _LOGGER = logging.getLogger(__name__)
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Set up one OpenCARWINGS account."""
+    from opencarwings_client import ApiException
+
+    from .api import async_list_cars, client_session, get_client
+    from .util import CarData
+
     hass.data.setdefault(DOMAIN, {})
 
     # Options win over what setup wrote.
     opts = getattr(entry, "options", {}) or {}
     base_url = opts.get("api_base_url", entry.data.get("api_base_url"))
-    client = OpenCarWingsAPI(hass, base_url=base_url) if base_url else OpenCarWingsAPI(hass)
 
     api_key = (entry.data.get(CONF_API_KEY) or "").strip()
     if not api_key:
         # Nothing to authenticate with: this entry predates the API key.
         raise ConfigEntryAuthFailed("No API key stored for this account")
-    client.set_api_key(api_key)
 
-    if base_url:
-        try:
-            setattr(client, "base_url", base_url)
-            setattr(client, "_base", base_url)
-        except Exception:
-            pass
+    session = _shared_session(hass)
+    client = await hass.async_add_executor_job(
+        get_client, hass, base_url, api_key, session
+    )
 
     hass.data[DOMAIN][entry.entry_id] = {"client": client}
 
-    async def _enrich_cars_with_details(cars: list) -> list:
-        """Fill in the fields the car list leaves out."""
-        if not isinstance(cars, list) or not cars:
-            return cars
-        if not hasattr(client, "async_get_car_by_vin"):
-            return cars
-
-        vins: list[str] = []
-        tasks = []
-        for c in cars:
-            if isinstance(c, dict) and c.get("vin"):
-                vin = str(c["vin"])
-                vins.append(vin)
-                tasks.append(client.async_get_car_by_vin(vin))
-
-        if not tasks:
-            return cars
-
-        details = await asyncio.gather(*tasks, return_exceptions=True)
-
-        # Merge by VIN: detail wins, list fills missing fields
-        by_vin: dict[str, dict] = {}
-        for c in cars:
-            if isinstance(c, dict) and c.get("vin"):
-                by_vin[str(c["vin"])] = c
-
-        for d in details:
-            if isinstance(d, Exception) or not isinstance(d, dict):
-                continue
-            vin = d.get("vin")
-            if not vin:
-                continue
-            vin = str(vin)
-            by_vin[vin] = {**by_vin.get(vin, {}), **d}
-
-        out: list[dict] = []
-        for c in cars:
-            if isinstance(c, dict) and c.get("vin"):
-                out.append(by_vin.get(str(c["vin"]), c))
-            elif isinstance(c, dict):
-                out.append(c)
-
-        return out
-
-    async def _async_update_data():
+    async def _async_update_data() -> list[CarData]:
         """Read every car on this account."""
-        from datetime import datetime, timezone
-
         try:
-            if hasattr(client, "async_get_cars"):
-                cars = await client.async_get_cars()
-
-                # The list endpoint omits odometer and versions.
-                try:
-                    cars = await _enrich_cars_with_details(cars)
-                except Exception as err:
-                    _LOGGER.debug("Could not enrich car list with details: %s", err)
-
-                coordinator.last_update_time = datetime.now(timezone.utc)
-                return cars
-
-            # The raw client, used by the tests.
-            if hasattr(client, "async_request"):
-                resp = await client.async_request("GET", "/api/car/")
-                result = await resp.json()
-
-                try:
-                    result = await _enrich_cars_with_details(result)
-                except Exception as err:
-                    _LOGGER.debug("Could not enrich car list with details: %s", err)
-
-                coordinator.last_update_time = datetime.now(timezone.utc)
-                return result
-
-            raise RuntimeError("Client has no method to fetch cars")
-
-        except AuthenticationError as err:
-            # Home Assistant turns this into a reauth flow.
-            raise ConfigEntryAuthFailed(err)
-        except RequestError as err:
+            return await async_list_cars(client)
+        except ApiException as err:
+            if getattr(err, "status", None) in (401, 403):
+                raise ConfigEntryAuthFailed(err)
             raise UpdateFailed(err)
         except Exception as err:  # pragma: no cover - network or unexpected
             raise UpdateFailed(err)
@@ -163,16 +88,17 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     try:
         await coordinator.async_config_entry_first_refresh()
         hass.data[DOMAIN][entry.entry_id]["cars"] = coordinator.data or []
-    except (ConfigEntryAuthFailed, AuthenticationError) as err:
+    except ConfigEntryAuthFailed as err:
         _LOGGER.warning("API key rejected; requesting reauthentication")
         raise ConfigEntryAuthFailed(err)
     except Exception:
         # Carry on so the platforms can fall back to cached data.
         _LOGGER.exception("Error while initializing OpenCARWINGS coordinator during setup")
         hass.data[DOMAIN][entry.entry_id]["cars"] = hass.data[DOMAIN][entry.entry_id].get("cars", [])
-        pass
 
-    _start_live_updates(hass, entry, client, coordinator, base_url, api_key)
+    _start_live_updates(
+        hass, entry, client_session(client), coordinator, base_url, api_key
+    )
 
     # Options otherwise sit unused until a restart. Not on the test stubs.
     if hasattr(entry, "add_update_listener") and hasattr(entry, "async_on_unload"):
@@ -228,6 +154,16 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     return True
 
 
+def _shared_session(hass):
+    """Home Assistant's aiohttp session, when there is one."""
+    try:
+        from homeassistant.helpers.aiohttp_client import async_get_clientsession
+
+        return async_get_clientsession(hass)
+    except Exception:  # pragma: no cover - test stubs
+        return None
+
+
 async def async_migrate_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Strip the old sign-in so Home Assistant asks for an API key instead."""
     if entry.version == 1:
@@ -243,17 +179,16 @@ async def async_migrate_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     return True
 
 
-def _start_live_updates(hass, entry, client, coordinator, base_url, api_key) -> None:
+def _start_live_updates(hass, entry, session, coordinator, base_url, api_key) -> None:
     """Follow the server's push socket. Polling stays on as the safety net."""
     if not hasattr(hass, "async_create_task"):  # pragma: no cover - test stubs
         return
 
-    session = getattr(client, "_session", None)
     if session is None or not hasattr(session, "ws_connect"):
         _LOGGER.debug("No websocket-capable session; staying on polling only")
         return
 
-    from .websocket import CarWingsSocket, DEFAULT_API_BASE_FALLBACK
+    from .websocket import DEFAULT_API_BASE_FALLBACK, CarWingsSocket
 
     socket = CarWingsSocket(
         hass, session, base_url or DEFAULT_API_BASE_FALLBACK, api_key, coordinator
@@ -289,9 +224,7 @@ def _resolve_car(hass: HomeAssistant, entry_id: str | None, vin: str | None):
         # cars is the setup-time snapshot; the coordinator has the live list.
         coord = data.get("coordinator")
         cars = getattr(coord, "data", None) or data.get("cars") or []
-        vins = [
-            str(c["vin"]) for c in cars if isinstance(c, dict) and c.get("vin")
-        ]
+        vins = [str(c.vin) for c in cars if c.vin]
         if vins:
             cars_by_entry[eid] = vins
 

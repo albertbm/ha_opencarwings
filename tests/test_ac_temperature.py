@@ -2,6 +2,8 @@ import importlib
 
 import pytest
 
+from conftest import make_car, stub_commands
+
 module = importlib.import_module("custom_components.ha_opencarwings")
 from custom_components.ha_opencarwings import commands
 
@@ -31,39 +33,33 @@ def test_unknown_unit_is_rejected():
 
 
 def test_single_car_needs_no_vin():
-    hass = _hass([{"vin": "VIN1"}])
+    hass = _hass([make_car(vin="VIN1")])
     assert module._resolve_car(hass, None, None) == ("e1", "VIN1")
 
 
 def test_two_cars_require_a_vin():
-    hass = _hass([{"vin": "VIN1"}, {"vin": "VIN2"}])
+    hass = _hass([make_car(vin="VIN1"), make_car(vin="VIN2")])
     with pytest.raises(module.ServiceValidationError):
         module._resolve_car(hass, None, None)
     assert module._resolve_car(hass, None, "VIN2") == ("e1", "VIN2")
 
 
 def test_unknown_vin_is_rejected():
-    hass = _hass([{"vin": "VIN1"}])
+    hass = _hass([make_car(vin="VIN1")])
     with pytest.raises(module.ServiceValidationError):
         module._resolve_car(hass, None, "NOPE")
 
 
 @pytest.mark.asyncio
-async def test_payload_rides_along_with_the_command():
-    sent = {}
-
-    class FakeClient:
-        async def async_request(self, method, path, **kwargs):
-            sent["path"] = path
-            sent["json"] = kwargs.get("json")
-            return type("R", (), {"status": 200})()
+async def test_payload_rides_along_with_the_command(monkeypatch):
+    sent = stub_commands(monkeypatch)
 
     class Entries:
         def async_get_entry(self, entry_id):
             return type("E", (), {"options": {}, "data": {}})()
 
     hass = type("H", (), {
-        "data": {"ha_opencarwings": {"e1": {"client": FakeClient(), "coordinator": None}}},
+        "data": {"ha_opencarwings": {"e1": {"client": object(), "coordinator": None}}},
         "config_entries": Entries(),
     })()
 
@@ -72,26 +68,22 @@ async def test_payload_rides_along_with_the_command():
         command_payload={"temp": 21, "unit": 0},
     )
 
-    assert sent["path"] == "/api/command/VIN1/"
-    assert sent["json"]["command_payload"] == {"temp": 21, "unit": 0}
-    assert sent["json"]["command_type"] == commands.CMD_AC_ON
+    vin, request = sent[0]
+    assert vin == "VIN1"
+    assert request.command_payload == {"temp": 21, "unit": 0}
+    assert request.command_type == commands.CMD_AC_ON
 
 
 @pytest.mark.asyncio
-async def test_commands_without_a_payload_send_none():
-    sent = {}
-
-    class FakeClient:
-        async def async_request(self, method, path, **kwargs):
-            sent["json"] = kwargs.get("json")
-            return type("R", (), {"status": 200})()
+async def test_commands_without_a_payload_send_none(monkeypatch):
+    sent = stub_commands(monkeypatch)
 
     class Entries:
         def async_get_entry(self, entry_id):
             return type("E", (), {"options": {}, "data": {}})()
 
     hass = type("H", (), {
-        "data": {"ha_opencarwings": {"e1": {"client": FakeClient(), "coordinator": None}}},
+        "data": {"ha_opencarwings": {"e1": {"client": object(), "coordinator": None}}},
         "config_entries": Entries(),
     })()
 
@@ -100,4 +92,4 @@ async def test_commands_without_a_payload_send_none():
     )
 
     # The server rejects a payload on every command except A/C on and config.
-    assert "command_payload" not in sent["json"]
+    assert sent[0][1].command_payload is None

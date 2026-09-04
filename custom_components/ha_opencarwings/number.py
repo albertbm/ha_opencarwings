@@ -30,7 +30,7 @@ async def async_setup_entry(hass, entry, async_add_entities):
     def _build(car: dict) -> list:
         if not car_supports(car, CMD_AC_ON):
             return []
-        return [CarRequestedTemperature(coordinator, entry.entry_id, car["vin"], car)]
+        return [CarRequestedTemperature(coordinator, entry.entry_id, car.vin, car)]
 
     async_add_cars(hass, entry, async_add_entities, _build)
 

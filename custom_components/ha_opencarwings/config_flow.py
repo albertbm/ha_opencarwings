@@ -9,7 +9,7 @@ try:
 except ImportError:  # pragma: no cover - older stubs
     CONF_API_KEY = "api_key"
 
-from .api import OpenCarWingsAPI, AuthenticationError, DEFAULT_API_BASE
+from .api import DEFAULT_API_BASE, AuthenticationError
 
 SCAN_INTERVAL_CHOICES = [
     (1, "1 minute"),
@@ -79,8 +79,18 @@ def _secret_selector():
 
 async def _async_check_api_key(hass, api_base: str, api_key: str) -> None:
     """Ask the server whether this key works. Raises AuthenticationError if not."""
-    client = OpenCarWingsAPI(hass, base_url=api_base, api_key=api_key)
-    await client.async_validate_api_key()
+    import opencarwings_client
+
+    from .api import get_client
+
+    client = await hass.async_add_executor_job(get_client, hass, api_base, api_key)
+    try:
+        async with client:
+            await opencarwings_client.CarsApi(client).api_car_list()
+    except opencarwings_client.ApiException as err:
+        if getattr(err, "status", None) in (401, 403):
+            raise AuthenticationError(err)
+        raise
 
 
 class OpenCARWINGSConfigFlow(config_entries.ConfigFlow, domain="ha_opencarwings"):

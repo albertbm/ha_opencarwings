@@ -26,6 +26,7 @@ from .commands import (
     async_send_command,
     car_supports,
 )
+from .util import CarData
 from .entity import async_add_cars
 
 
@@ -113,10 +114,10 @@ class CarRefreshButton(ButtonEntity):
     _attr_has_entity_name = True
     _attr_translation_key = "refresh"
 
-    def __init__(self, entry_id: str, car: dict) -> None:
+    def __init__(self, entry_id: str, car: CarData) -> None:
         self._entry_id = entry_id
         self._car = car
-        self._vin = car.get("vin")
+        self._vin = car.vin
 
     @property
     def unique_id(self) -> str:
@@ -124,12 +125,7 @@ class CarRefreshButton(ButtonEntity):
 
     @property
     def device_info(self) -> dict[str, Any]:
-        return {
-            "identifiers": {(DOMAIN, self._vin)},
-            "name": self._car.get("model_name"),
-            "manufacturer": self._car.get("make"),
-            "model": self._car.get("model_name"),
-        }
+        return self._car.car_model_data()
 
     async def async_press(self) -> None:
         await async_send_command(
@@ -148,10 +144,10 @@ class CarChargeStartButton(ButtonEntity):
     _attr_has_entity_name = True
     _attr_translation_key = "charge_start"
 
-    def __init__(self, entry_id: str, car: dict) -> None:
+    def __init__(self, entry_id: str, car: CarData) -> None:
         self._entry_id = entry_id
         self._car = car
-        self._vin = car.get("vin")
+        self._vin = car.vin
 
     @property
     def unique_id(self) -> str:
@@ -159,12 +155,7 @@ class CarChargeStartButton(ButtonEntity):
 
     @property
     def device_info(self) -> dict[str, Any]:
-        return {
-            "identifiers": {(DOMAIN, self._vin)},
-            "name": self._car.get("model_name"),
-            "manufacturer": self._car.get("make"),
-            "model": self._car.get("model_name"),
-        }
+        return self._car.car_model_data()
 
     async def async_press(self) -> None:
         await async_send_command(
@@ -182,23 +173,21 @@ class CarCommandButton(ButtonEntity):
 
     def __init__(self, entry_id: str, car: dict, spec: CommandButtonSpec, coordinator=None) -> None:
         self._entry_id = entry_id
-        self._seed_car = car or {}
+        self._seed_car = car
         self._coordinator = coordinator
-        self._vin = car.get("vin")
+        self._vin = car.vin
         self._spec = spec
         self._attr_icon = spec.icon
         self._attr_translation_key = spec.key
         if spec.diagnostic:
             self._attr_entity_category = EntityCategory.DIAGNOSTIC
 
-    def _get_car(self) -> dict:
-        """Merge seed data with the latest coordinator payload for this VIN."""
+    def _get_car(self) -> CarData:
         data = getattr(self._coordinator, "data", None) if self._coordinator else None
-        if data:
-            for car in data:
-                if isinstance(car, dict) and car.get("vin") == self._vin:
-                    return {**self._seed_car, **car}
-        return self._seed_car
+        for car in data or []:
+            if car.vin == self._vin:
+                return car
+        return self._seed_car or CarData(self._vin)
 
     @property
     def unique_id(self) -> str:
@@ -206,13 +195,7 @@ class CarCommandButton(ButtonEntity):
 
     @property
     def device_info(self) -> dict[str, Any]:
-        car = self._get_car()
-        return {
-            "identifiers": {(DOMAIN, self._vin)},
-            "name": car.get("nickname") or car.get("model_name"),
-            "manufacturer": car.get("make"),
-            "model": car.get("model_name"),
-        }
+        return self._get_car().car_model_data()
 
     async def async_press(self) -> None:
         await async_send_command(

@@ -1,5 +1,7 @@
 import pytest
 
+from conftest import make_car
+
 from custom_components.ha_opencarwings import binary_sensor as bin_mod
 
 
@@ -12,20 +14,7 @@ class FakeCoordinator:
         return lambda: None
 
 
-CAR = {
-    "vin": "VIN1",
-    "nickname": "DKL",
-    "ev_info": {
-        "id": 1,
-        "plugged_in": True,
-        "charging": True,
-        "quick_charging": False,
-        "charge_finish": False,
-        "ac_status": True,
-        "eco_mode": False,
-        "car_running": False,
-    },
-}
+CAR = make_car(vin="VIN1", nickname="DKL", ev_info={ "id": 1, "plugged_in": True, "charging": True, "quick_charging": False, "charge_finish": False, "ac_status": True, "eco_mode": False, "car_running": False, })
 
 
 async def _setup(car=CAR):
@@ -56,7 +45,7 @@ async def test_states_come_from_ev_info():
 
 @pytest.mark.asyncio
 async def test_missing_field_reads_as_unknown():
-    by_id = await _setup({"vin": "VIN1", "nickname": "DKL", "ev_info": {"id": 1}})
+    by_id = await _setup(make_car(vin="VIN1", nickname="DKL", ev_info={"id": 1}))
     assert by_id["ha_opencarwings_charging_VIN1"].is_on is None
 
 

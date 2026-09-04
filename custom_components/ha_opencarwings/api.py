@@ -1,19 +1,16 @@
-"""Async client for the OpenCARWINGS API.
+"""OpenCARWINGS API client.
 
-Every request carries an `Authorization: Token <key>` header. The key comes
-from your account settings on the server, not from Home Assistant.
+Wraps opencarwings_client with Home Assistant's shared aiohttp session, so we
+do not open a second connection pool.
 """
 from __future__ import annotations
 
+import asyncio
 import logging
-from typing import Optional
 
-try:
-    from aiohttp import ClientResponse
-except Exception:  # pragma: no cover - aiohttp not available in tests
-    ClientResponse = object
+import opencarwings_client
 
-from homeassistant.helpers.aiohttp_client import async_get_clientsession
+from .aioclient import RESTClientObject
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -28,74 +25,48 @@ class RequestError(Exception):
     pass
 
 
-class OpenCarWingsAPI:
-    def __init__(self, hass, base_url: str = DEFAULT_API_BASE, api_key: str | None = None) -> None:
-        self.hass = hass
-        # Imported here so tests can monkeypatch the session helper.
-        try:
-            import importlib
+def get_client(hass, base_url: str | None = None, api_token: str | None = None,
+               session=None) -> opencarwings_client.ApiClient:
+    """Build a client. Blocking, so call it from an executor."""
+    configuration = opencarwings_client.Configuration(host=base_url or DEFAULT_API_BASE)
 
-            aiohttp_mod = importlib.import_module(
-                "homeassistant.helpers.aiohttp_client"
-            )
-            self._session = aiohttp_mod.async_get_clientsession(hass)
-        except Exception:  # pragma: no cover - fallback for tests
-            self._session = None
+    if api_token:
+        configuration.api_key_prefix["Personal API Key"] = "Token"
+        configuration.api_key["Personal API Key"] = api_token
 
-        self._base = base_url.rstrip("/")
-        self._api_key: Optional[str] = api_key
+    client = opencarwings_client.ApiClient(configuration)
+    client.rest_client = RESTClientObject(configuration, session=session)
+    client.set_default_header("User-Agent", "OpenCARWINGS-HomeAssistant/1.0")
+    return client
 
-    def set_api_key(self, api_key: str | None) -> None:
-        self._api_key = (api_key or "").strip() or None
 
-    async def async_validate_api_key(self) -> list:
-        """List the cars to see whether the key works. Raises AuthenticationError if not."""
-        if not self._api_key:
-            raise AuthenticationError("No API key set")
-        return await self.async_get_cars()
+def client_session(client) -> object | None:
+    """The aiohttp session behind a client, for the push socket."""
+    return getattr(getattr(client, "rest_client", None), "pool_manager", None)
 
-    async def async_get_cars(self) -> list:
-        """Every car on this account."""
-        resp = await self.async_request("GET", "/api/car/")
-        if resp.status in (401, 403):
-            raise AuthenticationError("Not authorized to fetch cars")
-        if resp.status != 200:
-            text = await resp.text()
-            _LOGGER.debug("Failed to fetch cars: %s %s", resp.status, text)
-            raise RequestError(f"Failed fetching cars: {resp.status}")
 
-        data = await resp.json()
-        return data
+async def async_list_cars(client) -> list:
+    """Every car on the account, each with its detail merged in.
 
-    async def async_request(self, method: str, path: str, **kwargs) -> ClientResponse:
-        url = f"{self._base}{path if path.startswith('/') else '/' + path}"
-        headers = kwargs.pop("headers", {}) or {}
+    The list endpoint omits the odometer and TCU versions, so read each by VIN.
+    A failed detail leaves the list entry as it is.
+    """
+    from .util import CarData
 
-        if self._api_key:
-            headers["Authorization"] = f"Token {self._api_key}"
+    cars_api = opencarwings_client.CarsApi(client)
+    cars = [CarData(vin=c.vin, list_car=c) for c in await cars_api.api_car_list()]
 
-        try:
-            resp = await self._session.request(method, url, headers=headers, **kwargs)
-        except Exception as err:  # pragma: no cover - network error
-            _LOGGER.exception("Request to OpenCARWINGS failed")
-            raise RequestError(err)
+    by_vin = {str(c.vin): c for c in cars if c.vin}
+    if not by_vin:
+        return cars
 
-        return resp
+    details = await asyncio.gather(
+        *(cars_api.api_car_read(vin) for vin in by_vin), return_exceptions=True
+    )
+    for detail in details:
+        if isinstance(detail, Exception):
+            _LOGGER.debug("Could not read car detail: %s", detail)
+        elif getattr(detail, "vin", None):
+            by_vin[str(detail.vin)].car_detail = detail
 
-    async def async_get_car_by_vin(self, vin: str) -> dict:
-        """One car, with the fields the list endpoint omits."""
-        vin = (vin or "").strip()
-        if not vin:
-            raise RequestError("VIN missing")
-
-        path = f"/api/car/{vin}/"
-
-        resp = await self.async_request("GET", path)
-        if resp.status in (401, 403):
-            raise AuthenticationError("Not authorized to fetch car detail")
-        if resp.status != 200:
-            text = await resp.text()
-            _LOGGER.debug("Failed to fetch car detail by VIN %s: %s %s", vin, resp.status, text)
-            raise RequestError(f"Failed fetching car detail by VIN: {resp.status}")
-
-        return await resp.json()
+    return cars

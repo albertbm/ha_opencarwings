@@ -1,28 +1,12 @@
 import pytest
 
+from conftest import make_car
+
 from custom_components.ha_opencarwings import binary_sensor as bs_mod
 from custom_components.ha_opencarwings import sensor as sensor_mod
 
 
-CAR = {
-    "vin": "VIN1",
-    "model_name": "M1",
-    "odometer": 12345,
-    "signal_level": 4,
-    "carrier": "Telia",
-    "ev_info": {
-        "soh": 87,
-        "wh_content": 18400.0,
-        "gids": 230,
-        "max_gids": 502,
-        "cap_bars": 11,
-        "counter": 7,
-        "car_gear": 2,
-        "batt_heater_status": True,
-        "batt_heater_avail": True,
-        "obc_6kw_avail": False,
-    },
-}
+CAR = make_car(vin="VIN1", odometer=12345, signal_level=4, carrier="Telia", ev_info={ "soh": 87, "wh_content": 18400.0, "gids": 230, "max_gids": 502, "cap_bars": 11, "counter": 7, "car_gear": 2, "batt_heater_status": True, "batt_heater_avail": True, "obc_6kw_avail": False, })
 
 
 def _setup(module, car):
@@ -58,7 +42,7 @@ async def test_new_sensor_values():
 
 @pytest.mark.asyncio
 async def test_gear_and_blank_carrier():
-    car = {**CAR, "carrier": "  ", "ev_info": {**CAR["ev_info"], "car_gear": 0}}
+    car = make_car(vin="VIN1", carrier="  ", ev_info={"car_gear": 0})
     by_id = await _entities(sensor_mod, car)
 
     assert by_id["ha_opencarwings_car_gear_VIN1"].native_value == "park"
@@ -68,7 +52,7 @@ async def test_gear_and_blank_carrier():
 @pytest.mark.asyncio
 async def test_defaults_read_as_unknown():
     """The server stores 0 for fields the car has never reported."""
-    car = {**CAR, "odometer": -1, "ev_info": {**CAR["ev_info"], "soh": 0, "max_gids": 0}}
+    car = make_car(vin="VIN1", odometer=-1, ev_info={"soh": 0, "max_gids": 0})
     by_id = await _entities(sensor_mod, car)
 
     assert by_id["ha_opencarwings_odometer_VIN1"].native_value is None
@@ -87,7 +71,7 @@ async def test_new_binary_sensors():
 
 @pytest.mark.asyncio
 async def test_missing_fields_stay_none():
-    car = {"vin": "VIN2", "model_name": "M2", "ev_info": {}}
+    car = make_car(vin="VIN2", ev_info={})
     sensors = await _entities(sensor_mod, car)
     binaries = await _entities(bs_mod, car)
 

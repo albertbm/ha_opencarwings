@@ -1,11 +1,13 @@
 import pytest
 
+from conftest import make_car
+
 from custom_components.ha_opencarwings import sensor as sensor_mod
 
 
 @pytest.mark.asyncio
 async def test_sensor_creates_car_entities():
-    hass = type("H", (), {"data": {"ha_opencarwings": {"e1": {"cars": [{"vin": "VIN1", "model_name": "M1"}, {"vin": "VIN2", "model_name": "M2"}]}}}})()
+    hass = type("H", (), {"data": {"ha_opencarwings": {"e1": {"cars": [make_car(vin="VIN1"), make_car(vin="VIN2")]}}}})()
 
     # Capture added entities
     added = []

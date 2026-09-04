@@ -4,13 +4,9 @@ from custom_components.ha_opencarwings import config_flow as cf
 from custom_components.ha_opencarwings.api import AuthenticationError
 
 
-class MockClient:
-    def __init__(self, hass=None, base_url=None, api_key=None):
-        self.api_key = api_key
-
-    async def async_validate_api_key(self):
-        if self.api_key == "good":
-            return []
+async def _check_key(hass, api_base, api_key):
+    """Stand in for the round trip to the server."""
+    if api_key != "good":
         raise AuthenticationError("bad key")
 
 
@@ -53,7 +49,7 @@ async def test_blank_api_key_saves_options_without_touching_credentials():
 
 @pytest.mark.asyncio
 async def test_new_api_key_is_validated_and_stored(monkeypatch):
-    monkeypatch.setattr(cf, "OpenCarWingsAPI", MockClient)
+    monkeypatch.setattr(cf, "_async_check_api_key", _check_key)
     handler = _handler()
 
     result = await handler.async_step_init({
@@ -70,7 +66,7 @@ async def test_new_api_key_is_validated_and_stored(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_rejected_api_key_shows_an_error(monkeypatch):
-    monkeypatch.setattr(cf, "OpenCarWingsAPI", MockClient)
+    monkeypatch.setattr(cf, "_async_check_api_key", _check_key)
     handler = _handler()
     handler.async_show_form = lambda **kwargs: {"type": "form", **kwargs}
 

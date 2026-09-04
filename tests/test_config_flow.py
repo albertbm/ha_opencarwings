@@ -5,20 +5,15 @@ from custom_components.ha_opencarwings import config_flow as cfg
 from custom_components.ha_opencarwings.api import AuthenticationError
 
 
-class MockClient:
-    def __init__(self, hass=None, base_url=None, api_key=None):
-        self.base_url = base_url
-        self.api_key = api_key
-
-    async def async_validate_api_key(self):
-        if self.api_key == "good":
-            return []
+async def _check_key(hass, api_base, api_key):
+    """Stand in for the round trip to the server."""
+    if api_key != "good":
         raise AuthenticationError("bad key")
 
 
 @pytest.mark.asyncio
 async def test_config_flow_success(monkeypatch):
-    monkeypatch.setattr(cfg, "OpenCarWingsAPI", MockClient)
+    monkeypatch.setattr(cfg, "_async_check_api_key", _check_key)
 
     flow = OpenCARWINGSConfigFlow()
     result = await flow.async_step_user({"api_key": "good", "api_base_url": "https://custom.example"})
@@ -33,7 +28,7 @@ async def test_config_flow_success(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_config_flow_scan_interval_selected(monkeypatch):
-    monkeypatch.setattr(cfg, "OpenCarWingsAPI", MockClient)
+    monkeypatch.setattr(cfg, "_async_check_api_key", _check_key)
 
     flow = OpenCARWINGSConfigFlow()
     # provide explicit scan_interval and ensure it's persisted
@@ -45,7 +40,7 @@ async def test_config_flow_scan_interval_selected(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_config_flow_auth_failure(monkeypatch):
-    monkeypatch.setattr(cfg, "OpenCarWingsAPI", MockClient)
+    monkeypatch.setattr(cfg, "_async_check_api_key", _check_key)
 
     flow = OpenCARWINGSConfigFlow()
     result = await flow.async_step_user({"api_key": "bad"})
@@ -74,7 +69,7 @@ class _Entries:
 
 
 def _reauth_flow(monkeypatch):
-    monkeypatch.setattr(cfg, "OpenCarWingsAPI", MockClient)
+    monkeypatch.setattr(cfg, "_async_check_api_key", _check_key)
     entry = type("E", (), {
         "entry_id": "e1",
         "data": {

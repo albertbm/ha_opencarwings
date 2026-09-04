@@ -1,5 +1,7 @@
 import pytest
 
+from conftest import make_car
+
 from custom_components.ha_opencarwings import device_tracker as dt_mod
 
 
@@ -13,7 +15,7 @@ def _hass(radius=None, home=(52.0, 21.0)):
 
 
 def _tracker(lat, lon, hass):
-    car = {"vin": "VIN1", "last_location": {"lat": lat, "lon": lon}}
+    car = make_car(vin="VIN1", location={"lat": lat, "lon": lon})
     tracker = dt_mod.CarTracker("e1", car)
     tracker.hass = hass
     return tracker
@@ -38,7 +40,7 @@ def test_fix_outside_the_radius_is_dropped():
     assert tracker.latitude == pytest.approx(52.1)
 
     # The car cannot have moved 1000 km since the previous reading.
-    tracker._seed_car["last_location"] = {"lat": 61.0, "lon": 25.0}
+    tracker._seed_car = make_car(vin="VIN1", location={"lat": 61.0, "lon": 25.0})
     assert tracker.latitude == pytest.approx(52.1)
     assert tracker.longitude == pytest.approx(21.1)
 

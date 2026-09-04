@@ -1,5 +1,7 @@
 import pytest
 
+from conftest import make_car
+
 from custom_components.ha_opencarwings import number as number_mod
 from custom_components.ha_opencarwings import switch as switch_mod
 from custom_components.ha_opencarwings.commands import CMD_AC_ON
@@ -14,7 +16,7 @@ class FakeCoordinator:
         return lambda: None
 
 
-CAR = {"vin": "VIN1", "nickname": "DKL", "ev_info": {"id": 1, "ac_status": False}}
+CAR = make_car(vin="VIN1", nickname="DKL", ev_info={"id": 1, "ac_status": False})
 
 
 def _hass():

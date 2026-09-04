@@ -1,5 +1,7 @@
 import pytest
 
+from conftest import make_car
+
 from custom_components.ha_opencarwings import binary_sensor as bs_mod
 from custom_components.ha_opencarwings import button as button_mod
 from custom_components.ha_opencarwings import device_tracker as tracker_mod
@@ -28,8 +30,7 @@ class FakeCoordinator:
 
 
 def _car(vin):
-    return {"vin": vin, "model_name": "Leaf", "ev_info": {"soc": 50},
-            "location": {"lat": 50.0, "lon": 20.0}}
+    return make_car(vin=vin, ev_info={"soc": 50}, location={"lat": "50.0", "lon": "20.0"})
 
 
 class Entry:

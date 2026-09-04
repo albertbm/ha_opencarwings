@@ -1,4 +1,6 @@
 import pytest
+
+from conftest import run_executor, stub_client
 import asyncio
 
 import importlib
@@ -24,25 +26,11 @@ async def test_forward_entry_setups_and_unload(monkeypatch):
     })()
 
     hass = type("H", (), {"data": {}, "config_entries": config_entries})()
+    hass.async_add_executor_job = run_executor
 
     entry = type("E", (), {"entry_id": "e1", "data": {"api_key": "k"}, "title": "t"})()
 
-    # Monkeypatch the OpenCarWingsAPI to avoid real calls
-    class MockClient:
-        def __init__(self, hass, base_url=None):
-            self.base_url = base_url
-
-        async def async_request(self, method, path, **kwargs):
-            class R: status = 200
-            async def json():
-                return []
-            R.json = json
-            return R
-
-        def set_api_key(self, api_key):
-            pass
-
-    monkeypatch.setattr(module, "OpenCarWingsAPI", MockClient)
+    stub_client(monkeypatch)
 
     ok = await module.async_setup_entry(hass, entry)
     assert ok is True

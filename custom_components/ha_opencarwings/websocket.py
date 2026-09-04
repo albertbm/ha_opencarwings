@@ -9,6 +9,8 @@ import asyncio
 import json
 import logging
 
+from .util import CarData
+
 _LOGGER = logging.getLogger(__name__)
 
 WS_PATH = "/ws/notif/"
@@ -31,17 +33,6 @@ def socket_url(base_url: str) -> str:
     return f"wss://{base}{WS_PATH}"
 
 
-def _index_of(cars: list, key: str, value) -> int | None:
-    """Find the car holding a nested object with this id."""
-    for i, car in enumerate(cars):
-        if not isinstance(car, dict):
-            continue
-        nested = car.get(key)
-        if isinstance(nested, dict) and nested.get("id") == value:
-            return i
-    return None
-
-
 def apply_message(cars: list, message) -> list | None:
     """Merge one pushed object into the car list. None means nothing changed."""
     if not isinstance(message, dict):
@@ -52,28 +43,24 @@ def apply_message(cars: list, message) -> list | None:
     if not isinstance(data, dict):
         return None
 
-    cars = list(cars or [])
-
     if obj_type == "car":
         vin = data.get("vin")
         if not vin:
             return None
-        for i, car in enumerate(cars):
-            if isinstance(car, dict) and car.get("vin") == vin:
-                cars[i] = {**car, **data}
-                return cars
-        cars.append(data)
-        return cars
+        for car in cars or []:
+            if car.vin == vin:
+                return list(cars) if car.apply_push("car", data) else None
 
-    # The nested objects arrive on their own, carrying only their own id.
-    for obj, key in (("ev_info", "ev_info"), ("location", "location"),
-                     ("tcu_configuration", "tcu_configuration")):
-        if obj_type == obj:
-            i = _index_of(cars, key, data.get("id"))
-            if i is None:
-                return None
-            cars[i] = {**cars[i], key: {**(cars[i].get(key) or {}), **data}}
-            return cars
+        # A car added to the account arrives as a full object.
+        added = CarData.from_push(vin, data)
+        return [*(cars or []), added] if added else None
+
+    # Nested objects arrive alone, carrying only their own id.
+    if obj_type in ("ev_info", "location", "tcu_configuration"):
+        for car in cars or []:
+            nested = getattr(car.get_latest_car(), obj_type, None)
+            if nested is not None and nested.id == data.get("id"):
+                return list(cars) if car.apply_push(obj_type, data) else None
 
     return None
 

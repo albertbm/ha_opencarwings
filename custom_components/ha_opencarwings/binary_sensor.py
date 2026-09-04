@@ -17,6 +17,7 @@ except Exception:  # pragma: no cover
 
 from . import DOMAIN
 from .entity import OpenCarwingsCarEntity, async_add_cars
+from .util import CarData
 
 
 @dataclass(frozen=True)
@@ -52,7 +53,7 @@ async def async_setup_entry(hass, entry, async_add_entities):
 
     def _build(car: dict) -> list[CarBinarySensor]:
         return [
-            CarBinarySensor(coordinator, entry.entry_id, car["vin"], spec, car)
+            CarBinarySensor(coordinator, entry.entry_id, car.vin, spec, car)
             for spec in CAR_BINARY_SENSORS
         ]
 
@@ -60,10 +61,10 @@ async def async_setup_entry(hass, entry, async_add_entities):
 
 
 class CarBinarySensor(OpenCarwingsCarEntity, BinarySensorEntity):
-    """One boolean field from the car's ev_info."""
+    """One boolean from the car's ev_info."""
 
     def __init__(self, coordinator, entry_id: str, vin: str,
-                 spec: CarBinarySensorSpec, seed_car: dict | None = None) -> None:
+                 spec: CarBinarySensorSpec, seed_car: CarData | None = None) -> None:
         super().__init__(coordinator, entry_id, vin, seed_car)
         self._spec = spec
         self._attr_unique_id = f"ha_opencarwings_{spec.key}_{vin}"
@@ -77,6 +78,5 @@ class CarBinarySensor(OpenCarwingsCarEntity, BinarySensorEntity):
 
     @property
     def is_on(self) -> bool | None:
-        ev = self._get_car().get("ev_info") or {}
-        value = ev.get(self._spec.key)
+        value = self._get_ev_dict().get(self._spec.key)
         return None if value is None else bool(value)

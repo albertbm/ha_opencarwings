@@ -2,6 +2,8 @@ import asyncio
 
 import pytest
 
+from conftest import make_car
+
 from custom_components.ha_opencarwings import commands
 
 
@@ -28,14 +30,23 @@ class FakeClient:
         self.states = list(states)
         self.reads = 0
 
-    async def async_request(self, method, path, **kwargs):
-        return type("R", (), {"status": 200})()
+    def install(self, monkeypatch):
+        import opencarwings_client
 
-    async def async_get_car_by_vin(self, vin):
-        self.reads += 1
-        if len(self.states) > 1:
-            return self.states.pop(0)
-        return self.states[0]
+        client = self
+
+        class _CarsApi:
+            def __init__(self, _):
+                pass
+
+            async def api_car_read(self, vin):
+                client.reads += 1
+                if len(client.states) > 1:
+                    return client.states.pop(0)
+                return client.states[0]
+
+        monkeypatch.setattr(opencarwings_client, "CarsApi", _CarsApi)
+        return self
 
 
 def _hass(client, coordinator, bus):
@@ -64,16 +75,18 @@ def _no_waiting(monkeypatch):
 
 
 def _pending():
-    return {"command_requested": True, "command_result": commands.RESULT_AWAIT_RESPONSE}
+    return make_car(vin="VIN1", command_requested=True,
+                    command_result=commands.RESULT_AWAIT_RESPONSE).get_latest_car()
 
 
 def _done(result):
-    return {"command_requested": False, "command_result": result}
+    return make_car(vin="VIN1", command_requested=False,
+                    command_result=result).get_latest_car()
 
 
 @pytest.mark.asyncio
-async def test_watch_waits_for_the_car_then_refreshes():
-    client = FakeClient([_pending(), _pending(), _done(commands.RESULT_SUCCESS)])
+async def test_watch_waits_for_the_car_then_refreshes(monkeypatch):
+    client = FakeClient([_pending(), _pending(), _done(commands.RESULT_SUCCESS)]).install(monkeypatch)
     coord, bus = FakeCoordinator(), FakeBus()
     hass = _hass(client, coord, bus)
 
@@ -88,8 +101,8 @@ async def test_watch_waits_for_the_car_then_refreshes():
 
 
 @pytest.mark.asyncio
-async def test_a_failed_command_is_reported_as_error():
-    client = FakeClient([_done(commands.RESULT_ERROR)])
+async def test_a_failed_command_is_reported_as_error(monkeypatch):
+    client = FakeClient([_done(commands.RESULT_ERROR)]).install(monkeypatch)
     coord, bus = FakeCoordinator(), FakeBus()
     hass = _hass(client, coord, bus)
 
@@ -100,8 +113,8 @@ async def test_a_failed_command_is_reported_as_error():
 
 
 @pytest.mark.asyncio
-async def test_a_car_that_never_answers_gives_up_at_the_server_timeout():
-    client = FakeClient([_pending()])
+async def test_a_car_that_never_answers_gives_up_at_the_server_timeout(monkeypatch):
+    client = FakeClient([_pending()]).install(monkeypatch)
     coord, bus = FakeCoordinator(), FakeBus()
     hass = _hass(client, coord, bus)
 
@@ -113,8 +126,8 @@ async def test_a_car_that_never_answers_gives_up_at_the_server_timeout():
 
 
 @pytest.mark.asyncio
-async def test_one_watcher_per_car():
-    client = FakeClient([_pending(), _done(commands.RESULT_SUCCESS)])
+async def test_one_watcher_per_car(monkeypatch):
+    client = FakeClient([_pending(), _done(commands.RESULT_SUCCESS)]).install(monkeypatch)
     hass = _hass(client, FakeCoordinator(), FakeBus())
 
     commands._start_result_watch(hass, "e1", "VIN1", commands.CMD_AC_ON, "turn the A/C on")
@@ -127,15 +140,22 @@ async def test_one_watcher_per_car():
 
 
 @pytest.mark.asyncio
-async def test_read_failures_do_not_end_the_watch():
-    class Flaky(FakeClient):
-        async def async_get_car_by_vin(self, vin):
-            self.reads += 1
-            if self.reads == 1:
+async def test_read_failures_do_not_end_the_watch(monkeypatch):
+    import opencarwings_client
+
+    client = FakeClient([_pending()])
+
+    class _CarsApi:
+        def __init__(self, _):
+            pass
+
+        async def api_car_read(self, vin):
+            client.reads += 1
+            if client.reads == 1:
                 raise RuntimeError("network")
             return _done(commands.RESULT_SUCCESS)
 
-    client = Flaky([_pending()])
+    monkeypatch.setattr(opencarwings_client, "CarsApi", _CarsApi)
     coord, bus = FakeCoordinator(), FakeBus()
     hass = _hass(client, coord, bus)
 

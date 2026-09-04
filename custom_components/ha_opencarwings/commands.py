@@ -54,12 +54,12 @@ POLL_TIMEOUT = 330
 EVENT_COMMAND_FINISHED = f"{DOMAIN}_command_finished"
 
 
-def car_supports(car: dict, command_type: int) -> bool:
+def car_supports(car, command_type: int) -> bool:
     """Whether this car's TCU accepts a command.
 
     Older servers omit supported_commands; assume everything works.
     """
-    supported = car.get("supported_commands")
+    supported = getattr(car.get_latest_car(), "supported_commands", None)
     if not isinstance(supported, (list, tuple, set)) or not supported:
         return True
     return command_type in supported
@@ -77,18 +77,39 @@ def command_pin(hass, entry_id: str) -> str | None:
     return str(pin) if pin else None
 
 
-async def _error_message(resp) -> str:
-    """Pull the server's error text out of a failed command response."""
+def _error_message(err) -> str:
+    """Pull the server's error text out of a failed command."""
+    import json
+
+    body = getattr(err, "body", None)
+    if not body:
+        return getattr(err, "reason", None) or "unknown error"
     try:
-        body = await resp.json()
+        parsed = json.loads(body)
     except Exception:
-        try:
-            return (await resp.text())[:200]
-        except Exception:
-            return "unknown error"
-    if isinstance(body, dict):
-        return str(body.get("error") or body.get("detail") or body)
-    return str(body)
+        return str(body)[:200]
+    if isinstance(parsed, dict):
+        return str(parsed.get("error") or parsed.get("detail") or parsed)
+    return str(parsed)
+
+
+def _apply_car(hass, entry_id: str, vin: str, car) -> None:
+    """Push a freshly returned car into the coordinator."""
+    if car is None:
+        return
+    coordinator = hass.data.get(DOMAIN, {}).get(entry_id, {}).get("coordinator")
+    data = getattr(coordinator, "data", None)
+    if not data:
+        return
+    for entry in data:
+        if entry.vin == vin:
+            entry.car_detail = car
+            break
+    else:
+        return
+    setter = getattr(coordinator, "async_set_updated_data", None)
+    if setter:
+        setter(data)
 
 
 async def async_send_command(
@@ -100,34 +121,35 @@ async def async_send_command(
     command_payload: dict[str, Any] | None = None,
 ) -> None:
     """Send one command, raising HomeAssistantError with the server's reason."""
-    client = hass.data[DOMAIN][entry_id]["client"]
+    import opencarwings_client
+    from opencarwings_client import ApiCommandCreateRequest, ApiException
 
-    payload: dict[str, Any] = {"vin": vin, "command_type": command_type}
-    # Only climate on and config accept one; other commands 400 with it.
-    if command_payload:
-        payload["command_payload"] = command_payload
-    # Ignored by the server on commands that do not need it.
-    pin = command_pin(hass, entry_id)
-    if pin:
-        payload["command_pin"] = pin
+    client = hass.data[DOMAIN][entry_id]["client"]
+    request = ApiCommandCreateRequest(
+        command_type=command_type,
+        # Only climate on and config accept a payload; others 400 with one.
+        command_payload=command_payload,
+        # Ignored by the server on commands that do not need it.
+        command_pin=command_pin(hass, entry_id),
+    )
 
     try:
-        resp = await client.async_request("POST", f"/api/command/{vin}/", json=payload)
-    except Exception as err:  # pragma: no cover - network
-        _LOGGER.exception("Failed to %s for %s", description, vin)
-        raise HomeAssistantError(f"Could not {description}: {err}") from err
-
-    # async_request hands back the response untouched, so check it.
-    status = getattr(resp, "status", 200)
-    if status >= 400:
-        message = await _error_message(resp)
-        if status == 403:
+        response = await opencarwings_client.CarsApi(client).api_command_create(vin, request)
+    except ApiException as err:
+        message = _error_message(err)
+        if err.status == 403:
             message = (
                 f"{message}. Set the command PIN in the OpenCARWINGS "
                 "integration options (Settings > Devices & services > Configure)."
             )
-        _LOGGER.error("%s failed for %s: HTTP %s %s", description, vin, status, message)
-        raise HomeAssistantError(f"Could not {description}: {message}")
+        _LOGGER.error("%s failed for %s: HTTP %s %s", description, vin, err.status, message)
+        raise HomeAssistantError(f"Could not {description}: {message}") from err
+    except Exception as err:  # pragma: no cover - network
+        _LOGGER.exception("Failed to %s for %s", description, vin)
+        raise HomeAssistantError(f"Could not {description}: {err}") from err
+
+    # The response carries the car as the server now has it.
+    _apply_car(hass, entry_id, vin, getattr(response, "car", None))
 
     # Pull fresh car data so the diagnostic timestamps reflect this request.
     try:
@@ -167,6 +189,8 @@ async def _async_watch_result(
     coordinator = data.get("coordinator")
     watching = hass.data.get(DOMAIN, {}).get("_watching") or set()
 
+    import opencarwings_client
+
     result = None
     waited = 0
     attempts = max(1, int(POLL_TIMEOUT // POLL_INTERVAL)) if POLL_INTERVAL else 1
@@ -175,15 +199,16 @@ async def _async_watch_result(
             await asyncio.sleep(POLL_INTERVAL)
             waited += POLL_INTERVAL
             try:
-                car = await client.async_get_car_by_vin(vin)
+                car = await opencarwings_client.CarsApi(client).api_car_read(vin)
             except Exception as err:
                 _LOGGER.debug("Could not read %s while awaiting %s: %s", vin, description, err)
                 continue
 
-            if not isinstance(car, dict):
+            if car is None:
                 continue
-            result = car.get("command_result")
-            if car.get("command_requested") and result in PENDING_RESULTS:
+            _apply_car(hass, entry_id, vin, car)
+            result = car.command_result
+            if car.command_requested and result in PENDING_RESULTS:
                 continue
             break
         else:

@@ -1,3 +1,4 @@
+"""Device tracker for the car's last known position."""
 from __future__ import annotations
 
 import logging
@@ -6,15 +7,9 @@ from typing import Any
 
 from homeassistant.components.device_tracker import SourceType, TrackerEntity
 
-try:
-    from homeassistant.helpers.restore_state import RestoreEntity
-except Exception:  # pragma: no cover - tests running without hass stubs
-    class RestoreEntity:  # type: ignore
-        """Fallback base class used when RestoreEntity cannot be imported in tests."""
-        pass
-
 from . import CONF_GPS_MAX_RADIUS_KM, DEFAULT_GPS_MAX_RADIUS_KM, DOMAIN
 from .entity import async_add_cars
+from .util import CarData
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -35,74 +30,58 @@ def _haversine_km(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
 async def async_setup_entry(hass, entry, async_add_entities):
     coordinator = hass.data.get(DOMAIN, {}).get(entry.entry_id, {}).get("coordinator")
 
-    if coordinator and getattr(coordinator, "data", None) is None:
-        if hasattr(coordinator, "async_request_refresh"):
+    # Without a first fix there is nothing to place on the map.
+    if coordinator is not None and getattr(coordinator, "data", None) is None:
+        refresh = getattr(coordinator, "async_request_refresh", None)
+        if refresh is not None:
             try:
-                await coordinator.async_request_refresh()
+                await refresh()
             except Exception:  # pragma: no cover - network
                 pass
 
-    def _build(car: dict) -> list:
+    def _build(car: CarData) -> list:
+        if not car.vin:
+            return []
         return [CarTracker(entry.entry_id, car, coordinator)]
 
     async_add_cars(hass, entry, async_add_entities, _build)
 
 
-class CarTracker(TrackerEntity, RestoreEntity):
+class CarTracker(TrackerEntity):
     """Where the car is, per the server's last location fix."""
 
     _attr_has_entity_name = True
     _attr_translation_key = "tracker"
 
-    def __init__(self, entry_id: str, car: dict, coordinator=None) -> None:
+    def __init__(self, entry_id: str, car: CarData, coordinator=None) -> None:
         self._entry_id = entry_id
-        # Only a fallback for fields the coordinator does not carry.
-        self._seed_car = car or {}
+        self._seed_car = car
         self._coordinator = coordinator
-        self._vin = car.get("vin")
+        self._vin = car.vin
         self._last_good: tuple[float, float] | None = None
         self._last_reject: dict[str, Any] | None = None
 
-    def _get_car(self) -> dict:
-        """Merge seed data with the latest coordinator payload for this VIN."""
+    def _get_car(self) -> CarData:
         data = getattr(self._coordinator, "data", None) if self._coordinator else None
-        if data:
-            for car in data:
-                if isinstance(car, dict) and car.get("vin") == self._vin:
-                    return {**self._seed_car, **car}
-        return self._seed_car
+        for car in data or []:
+            if car.vin == self._vin:
+                return car
+        return self._seed_car or CarData(self._vin)
 
-    @property
-    def unique_id(self) -> str:
-        return f"ha_opencarwings_tracker_{self._vin}"
+    def _raw_lat_lon(self) -> tuple[float | None, float | None]:
+        loc = self._get_car().as_dict().get("location")
+        if not isinstance(loc, dict):
+            return None, None
 
-    @property
-    def source_type(self) -> SourceType:
-        return SourceType.GPS
-
-    async def async_added_to_hass(self) -> None:
-        """Seed the filter with the last good position from before a restart."""
-        parent = getattr(super(), "async_added_to_hass", None)
-        if parent is not None:
-            await parent()
-
-        add_listener = getattr(self._coordinator, "async_add_listener", None)
-        if add_listener is not None and hasattr(self, "async_on_remove"):
-            self.async_on_remove(add_listener(self.async_write_ha_state))
-
-        get_last_state = getattr(self, "async_get_last_state", None)
-        if get_last_state is None or self._last_good is not None:
-            return
-
-        last = await get_last_state()
-        if last is None:
-            return
-
-        lat = last.attributes.get("latitude")
-        lon = last.attributes.get("longitude")
-        if isinstance(lat, (int, float)) and isinstance(lon, (int, float)):
-            self._last_good = (float(lat), float(lon))
-            _LOGGER.debug("%s: restored last good position %s", self.name, self._last_good)
+        lat, lon = loc.get("lat"), loc.get("lon")
+        if lat is None or lon is None:
+            return None, None
+        try:
+            # Some locales send a comma as the decimal separator.
+            return (float(str(lat).replace(",", ".")),
+                    float(str(lon).replace(",", ".")))
+        except ValueError:
+            return None, None
 
     def _max_radius_km(self) -> float:
         """Configured radius in km. Zero or less means do not filter."""
@@ -130,29 +109,7 @@ class CarTracker(TrackerEntity, RestoreEntity):
             return float(lat), float(lon)
         return None
 
-    def _raw_lat_lon(self):
-        car = self._get_car()
-        loc = car.get("last_location") or car.get("location")
-        if loc is None and isinstance(car.get("ev_info"), dict):
-            loc = car.get("ev_info", {}).get("last_location")
-
-        if isinstance(loc, list) and len(loc) > 0:
-            loc = loc[0]
-
-        if isinstance(loc, dict):
-            lat = loc.get("lat") or loc.get("latitude")
-            lon = loc.get("lon") or loc.get("longitude")
-            if lat is not None and lon is not None:
-                # Accept commas as decimal separators ("53,0")
-                try:
-                    lat_f = float(str(lat).replace(",", "."))
-                    lon_f = float(str(lon).replace(",", "."))
-                    return lat_f, lon_f
-                except Exception:
-                    return None, None
-        return None, None
-
-    def _get_lat_lon(self):
+    def _lat_lon(self) -> tuple[float | None, float | None]:
         lat, lon = self._raw_lat_lon()
         if lat is None or lon is None:
             return self._last_good or (None, None)
@@ -182,10 +139,6 @@ class CarTracker(TrackerEntity, RestoreEntity):
         self._reject(lat, lon, distance)
         return self._last_good or (None, None)
 
-    def _car_label(self) -> str:
-        car = self._get_car()
-        return car.get("nickname") or car.get("model_name") or self._vin
-
     def _reject(self, lat: float, lon: float, distance: float | None) -> None:
         """Record a discarded fix; log it only the first time."""
         reject = {
@@ -197,7 +150,7 @@ class CarTracker(TrackerEntity, RestoreEntity):
             _LOGGER.warning(
                 "%s: discarding implausible GPS fix %.6f, %.6f (%s km from home, "
                 "limit %s km); holding last known good position %s",
-                self._car_label(),
+                self._vin,
                 lat,
                 lon,
                 reject["distance_from_home_km"],
@@ -207,52 +160,48 @@ class CarTracker(TrackerEntity, RestoreEntity):
         self._last_reject = reject
 
     @property
+    def unique_id(self) -> str:
+        return f"ha_opencarwings_tracker_{self._vin}"
+
+    @property
+    def source_type(self) -> SourceType:
+        return SourceType.GPS
+
+    @property
     def latitude(self) -> float | None:
-        return self._get_lat_lon()[0]
+        return self._lat_lon()[0]
 
     @property
     def longitude(self) -> float | None:
-        return self._get_lat_lon()[1]
+        return self._lat_lon()[1]
 
     @property
     def available(self) -> bool:
-        lat, lon = self._get_lat_lon()
-        return lat is not None and lon is not None
+        return self._lat_lon() != (None, None)
 
     @property
     def extra_state_attributes(self) -> dict[str, Any]:
-        car = self._get_car()
-        raw_loc = None
-        raw_src = None
-        if isinstance(car.get("last_location"), dict):
-            raw_loc = car.get("last_location")
-            raw_src = "last_location"
-        elif isinstance(car.get("last_location"), list) and len(car.get("last_location")) > 0:
-            raw_loc = car.get("last_location")[0]
-            raw_src = "last_location"
-        elif isinstance(car.get("ev_info"), dict):
-            raw_loc = car.get("ev_info", {}).get("last_location")
-            if raw_loc is not None:
-                raw_src = "ev_info.last_location"
+        raw = self._get_car().as_dict().get("location")
 
         # Force the filter to run so the diagnostics below reflect this update.
-        self._get_lat_lon()
+        self._lat_lon()
 
         return {
-            **car,
-            "last_location_raw": raw_loc,
-            "last_location_source": raw_src,
+            "location_raw": raw if isinstance(raw, dict) and raw else None,
             "gps_filter_max_radius_km": self._max_radius_km(),
             "gps_filter_rejected": self._last_reject is not None,
             "gps_filter_last_rejected_fix": self._last_reject,
         }
 
     @property
-    def device_info(self) -> dict[str, Any]:
-        car = self._get_car()
-        return {
-            "identifiers": {(DOMAIN, self._vin)},
-            "name": car.get("nickname") or car.get("model_name"),
-            "manufacturer": car.get("make"),
-            "model": car.get("model_name"),
-        }
+    def device_info(self) -> dict:
+        return self._get_car().car_model_data()
+
+    async def async_added_to_hass(self) -> None:
+        parent = getattr(super(), "async_added_to_hass", None)
+        if parent is not None:
+            await parent()
+
+        add_listener = getattr(self._coordinator, "async_add_listener", None)
+        if add_listener is not None and hasattr(self, "async_on_remove"):
+            self.async_on_remove(add_listener(self.async_write_ha_state))

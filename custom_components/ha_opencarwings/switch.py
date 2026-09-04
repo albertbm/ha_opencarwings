@@ -21,6 +21,7 @@ from .commands import (
     async_send_command,
     car_supports,
 )
+from .util import CarData
 from .entity import async_add_cars
 
 _LOGGER = logging.getLogger(__name__)
@@ -75,11 +76,11 @@ class CarClimateSwitch(CoordinatorEntity, SwitchEntity):
     # The server reports ac_status, so the state is real.
     _attr_assumed_state = False
 
-    def __init__(self, coordinator, entry_id: str, car: dict) -> None:
+    def __init__(self, coordinator, entry_id: str, car: CarData) -> None:
         super().__init__(coordinator)
         self._entry_id = entry_id
-        self._seed_car = car or {}
-        self._vin = car.get("vin")
+        self._seed_car = car
+        self._vin = car.vin
         # What we asked for, until the car reports it or the command finishes.
         self._pending: bool | None = None
         self._unsub = None
@@ -95,15 +96,21 @@ class CarClimateSwitch(CoordinatorEntity, SwitchEntity):
             self._unsub()
             self._unsub = None
 
-    def _get_car(self) -> dict:
+    def _get_car(self) -> CarData:
         data = getattr(self.coordinator, "data", None) if self.coordinator else None
         for car in data or []:
-            if isinstance(car, dict) and car.get("vin") == self._vin:
-                return {**self._seed_car, **car}
-        return self._seed_car
+            if car.vin == self._vin:
+                return car
+        return self._seed_car or CarData(self._vin)
+
+    def _get_car_dict(self) -> dict:
+        return self._get_car().as_dict()
+
+    def _get_ev_dict(self) -> dict:
+        return self._get_car_dict().get("ev_info") or {}
 
     def _reported(self) -> bool | None:
-        ev = self._get_car().get("ev_info") or {}
+        ev = self._get_ev_dict()
         status = ev.get("ac_status")
         return None if status is None else bool(status)
 
@@ -112,20 +119,14 @@ class CarClimateSwitch(CoordinatorEntity, SwitchEntity):
         return f"ha_opencarwings_ac_{self._vin}"
 
     @property
+    def device_info(self) -> dict[str, Any]:
+        return self._get_car().car_model_data()
+
+    @property
     def is_on(self) -> bool | None:
         if self._pending is not None:
             return self._pending
         return self._reported()
-
-    @property
-    def device_info(self) -> dict[str, Any]:
-        car = self._get_car()
-        return {
-            "identifiers": {(DOMAIN, self._vin)},
-            "name": car.get("nickname") or car.get("model_name"),
-            "manufacturer": car.get("make"),
-            "model": car.get("model_name"),
-        }
 
     def _handle_coordinator_update(self) -> None:
         if self._pending is not None and self._reported() == self._pending:
@@ -173,40 +174,32 @@ class CarCommandSwitch(SwitchEntity):
 
     def __init__(self, entry_id: str, car: dict, spec: CommandSwitchSpec, coordinator=None) -> None:
         self._entry_id = entry_id
-        self._seed_car = car or {}
+        self._seed_car = car
         self._coordinator = coordinator
-        self._vin = car.get("vin")
+        self._vin = car.vin
         self._spec = spec
         self._attr_icon = spec.icon
         self._attr_translation_key = spec.key
         self._is_on = False
 
-    def _get_car(self) -> dict:
-        """Merge seed data with the latest coordinator payload for this VIN."""
+    def _get_car(self) -> CarData:
         data = getattr(self._coordinator, "data", None) if self._coordinator else None
-        if data:
-            for car in data:
-                if isinstance(car, dict) and car.get("vin") == self._vin:
-                    return {**self._seed_car, **car}
-        return self._seed_car
+        for car in data or []:
+            if car.vin == self._vin:
+                return car
+        return self._seed_car or CarData(self._vin)
 
     @property
     def unique_id(self) -> str:
         return f"ha_opencarwings_cmd{self._spec.on_command}_{self._vin}"
 
     @property
-    def is_on(self) -> bool:
-        return self._is_on
+    def device_info(self) -> dict[str, Any]:
+        return self._get_car().car_model_data()
 
     @property
-    def device_info(self) -> dict[str, Any]:
-        car = self._get_car()
-        return {
-            "identifiers": {(DOMAIN, self._vin)},
-            "name": car.get("nickname") or car.get("model_name"),
-            "manufacturer": car.get("make"),
-            "model": car.get("model_name"),
-        }
+    def is_on(self) -> bool:
+        return self._is_on
 
     async def async_turn_on(self, **kwargs: Any) -> None:
         await async_send_command(

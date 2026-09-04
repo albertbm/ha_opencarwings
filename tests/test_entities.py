@@ -1,11 +1,13 @@
 import pytest
 
+from conftest import make_car
+
 from custom_components.ha_opencarwings import sensor as sensor_mod
 
 
 @pytest.mark.asyncio
 async def test_battery_and_location_and_switch_creation(monkeypatch):
-    hass = type("H", (), {"data": {"ha_opencarwings": {"e1": {"cars": [{"vin": "VIN1", "model_name": "M1", "battery_level": 80, "last_location": {"lat": "50.0", "lon": "20.0"}, "ev_info": {"range_acon": 120, "range_acoff": 140, "soc": 80, "plugged_in": True, "charging": False}}]}}}})()
+    hass = type("H", (), {"data": {"ha_opencarwings": {"e1": {"cars": [make_car(vin="VIN1", battery_level=80, location={"lat": "50.0", "lon": "20.0"}, ev_info={"range_acon": 120, "range_acoff": 140, "soc": 80, "plugged_in": True, "charging": False})]}}}})()
 
     added = []
 
@@ -18,6 +20,8 @@ async def test_battery_and_location_and_switch_creation(monkeypatch):
 
     # One CarListSensor, then the specs plus status, last updated, last
     # requested and VIN for the car.
+    # One list sensor, then every spec plus status, last updated, last
+    # requested, VIN and fault codes.
     assert len(added) == 1 + len(sensor_mod.CAR_SENSORS) + 4
 
     # new EV sensors

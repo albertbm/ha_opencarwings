@@ -1,69 +1,48 @@
 import pytest
-import importlib
 
-from custom_components.ha_opencarwings import api
-module_init = importlib.import_module("custom_components.ha_opencarwings")
+from conftest import make_car, run_executor, stub_client
 
-
-class MockResponse:
-    def __init__(self, status=200, json_data=None, text_data=""):
-        self.status = status
-        self._json = json_data or {}
-        self._text = text_data
-
-    async def json(self):
-        return self._json
-
-    async def text(self):
-        return self._text
+import custom_components.ha_opencarwings as module_init
 
 
-class MockClient:
-    def __init__(self, hass=None):
-        self._called = False
+def _hass():
+    class C:
+        async def async_forward_entry_setups(self, *args, **kwargs):
+            return None
 
-    async def async_request(self, method, path, **kwargs):
-        return MockResponse(200, [{"vin": "VIN1", "model_name": "Model A"}, {"vin": "VIN2", "model_name": "Model B"}])
+        async def async_unload_platforms(self, *args, **kwargs):
+            return True
 
-    def set_api_key(self, api_key):
-        pass
+        def async_start_reauth(self, *args, **kwargs):
+            return None
+
+    hass = type("H", (), {"data": {}, "config_entries": C()})()
+    hass.async_add_executor_job = run_executor
+    return hass
 
 
 @pytest.mark.asyncio
-async def test_get_cars_api(monkeypatch):
-    client = api.OpenCarWingsAPI(hass=None)
+async def test_setup_stores_the_account_cars(monkeypatch):
+    stub_client(monkeypatch, [make_car(vin="VIN1", nickname="One"),
+                              make_car(vin="VIN2", nickname="Two")])
+    hass = _hass()
+    entry = type("E", (), {
+        "entry_id": "e1",
+        "data": {"api_key": "k", "api_base_url": "https://custom.example"},
+        "title": "t",
+    })()
 
-    # Monkeypatch the client's session to return the mocked response when called by async_get_cars
-    async def _request(self, method, url, headers=None, **kwargs):
-        return MockResponse(200, [{"vin": "VINX"}])
+    assert await module_init.async_setup_entry(hass, entry)
 
-    client._session = type("S", (), {"request": _request})()
-
-    cars = await client.async_get_cars()
-
-    assert isinstance(cars, list)
-    assert cars[0]["vin"] == "VINX"
+    stored = hass.data["ha_opencarwings"]["e1"]
+    assert [c.vin for c in stored["cars"]] == ["VIN1", "VIN2"]
+    assert stored["client"] is not None
 
 
 @pytest.mark.asyncio
-async def test_setup_stores_cars(monkeypatch):
-    async def _forward(self, entry, platforms):
-        return None
+async def test_setup_without_an_api_key_asks_for_reauth(monkeypatch):
+    stub_client(monkeypatch)
+    entry = type("E", (), {"entry_id": "e1", "data": {}, "title": "t"})()
 
-    async def _unload(self, entry, platforms):
-        return True
-
-    config_entries = type("C", (), {"async_start_reauth": lambda x: None, "async_forward_entry_setups": _forward, "async_unload_platforms": _unload})()
-    hass = type("H", (), {"data": {}, "config_entries": config_entries})()
-
-    # Monkeypatch OpenCarWingsAPI in the module to return our MockClient
-    monkeypatch.setattr("custom_components.ha_opencarwings.OpenCarWingsAPI", lambda hass, base_url=None: MockClient(hass))
-
-    entry = type("E", (), {"entry_id": "e1", "data": {"api_key": "k", "api_base_url": "https://custom.example"}, "title": "t"})()
-
-    ok = await module_init.async_setup_entry(hass, entry)
-
-    assert ok
-    assert hass.data["ha_opencarwings"]["e1"]["cars"][0]["vin"] == "VIN1"
-    # ensure base url was passed through into client
-    assert hasattr(hass.data["ha_opencarwings"]["e1"]["client"], "base_url") or hasattr(hass.data["ha_opencarwings"]["e1"]["client"], "_base")
+    with pytest.raises(module_init.ConfigEntryAuthFailed):
+        await module_init.async_setup_entry(_hass(), entry)

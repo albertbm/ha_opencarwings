@@ -1,21 +1,12 @@
 import pytest
 
+from conftest import make_car, stub_commands
+
 
 @pytest.mark.asyncio
 async def test_ac_switch_calls_api(monkeypatch):
-    # Create hass with data and a client stub
-    calls = []
-
-    class MockClient:
-        def __init__(self, hass):
-            self.hass = hass
-
-        async def async_request(self, method, path, **kwargs):
-            calls.append((method, path, kwargs))
-            class R: pass
-            return R()
-
-    hass = type("H", (), {"data": {"ha_opencarwings": {"e1": {"client": MockClient(None), "cars": [{"vin": "VIN1", "model_name": "M1"}]}}}})()
+    calls = stub_commands(monkeypatch)
+    hass = type("H", (), {"data": {"ha_opencarwings": {"e1": {"client": object(), "cars": [make_car(vin="VIN1")]}}}})()
 
     from custom_components.ha_opencarwings import switch as switch_mod
     entry = type("E", (), {"entry_id": "e1"})()
@@ -29,10 +20,10 @@ async def test_ac_switch_calls_api(monkeypatch):
 
     # turn on
     await sw.async_turn_on()
-    assert calls[0][0] == "POST"
-    assert "/api/command/VIN1/" in calls[0][1]
+    assert calls[0][0] == "VIN1"
+    assert calls[0][1].command_type == 3
 
     # turn off
     await sw.async_turn_off()
-    assert calls[1][0] == "POST"
-    assert "/api/command/VIN1/" in calls[1][1]
+    assert calls[1][0] == "VIN1"
+    assert calls[1][1].command_type == 4
