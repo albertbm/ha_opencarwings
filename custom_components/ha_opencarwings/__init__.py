@@ -20,6 +20,12 @@ except ImportError:  # pragma: no cover - older stubs
         """Fallback used when the real exception cannot be imported."""
 
 try:
+    from homeassistant.exceptions import ConfigEntryNotReady
+except ImportError:  # pragma: no cover - older stubs
+    class ConfigEntryNotReady(Exception):  # type: ignore
+        """Fallback used when the real exception cannot be imported."""
+
+try:
     from homeassistant.const import CONF_API_KEY
 except ImportError:  # pragma: no cover - older stubs
     CONF_API_KEY = "api_key"
@@ -72,14 +78,23 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             raise UpdateFailed(err)
 
     scan_min = opts.get("scan_interval", entry.data.get("scan_interval", DEFAULT_SCAN_INTERVAL_MIN))
+    try:
+        # Entries written before the selector stored strings carry one.
+        scan_min = int(scan_min)
+    except (TypeError, ValueError):
+        scan_min = DEFAULT_SCAN_INTERVAL_MIN
 
-    coordinator = DataUpdateCoordinator(
-        hass,
-        _LOGGER,
+    coordinator_kwargs = dict(
         name=f"{DOMAIN}_{entry.entry_id}",
         update_method=_async_update_data,
         update_interval=timedelta(minutes=scan_min),
     )
+    try:
+        coordinator = DataUpdateCoordinator(
+            hass, _LOGGER, config_entry=entry, **coordinator_kwargs
+        )
+    except TypeError:  # pragma: no cover - stubs without config_entry
+        coordinator = DataUpdateCoordinator(hass, _LOGGER, **coordinator_kwargs)
 
     hass.data[DOMAIN][entry.entry_id]["coordinator"] = coordinator
 
@@ -89,10 +104,9 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     except ConfigEntryAuthFailed as err:
         _LOGGER.warning("API key rejected; requesting reauthentication")
         raise ConfigEntryAuthFailed(err)
-    except Exception:
-        # Carry on so the platforms can fall back to cached data.
-        _LOGGER.exception("Error while initializing OpenCARWINGS coordinator during setup")
-        hass.data[DOMAIN][entry.entry_id]["cars"] = hass.data[DOMAIN][entry.entry_id].get("cars", [])
+    except Exception as err:
+        # There is no cache on a first setup, so let Home Assistant retry.
+        raise ConfigEntryNotReady(err) from err
 
     _start_live_updates(
         hass, entry, client_session(client), coordinator, base_url, api_key
@@ -250,6 +264,15 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     socket = stored.get("socket")
     if socket:
         await socket.stop()
+
+    # Drop the services with the last entry, not the first.
+    domain_data = hass.data.get(DOMAIN, {})
+    services = getattr(hass, "services", None)
+    if services and not any(isinstance(v, dict) for v in domain_data.values()):
+        for service in ("refresh", "ac_on"):
+            services.async_remove(DOMAIN, service)
+        domain_data.pop("_service_refresh_registered", None)
+
     return unload_ok
 
 

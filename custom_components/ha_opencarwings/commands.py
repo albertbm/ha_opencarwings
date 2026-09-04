@@ -164,7 +164,10 @@ async def async_send_command(
 
 def _start_result_watch(hass, entry_id: str, vin: str, command_type: int, description: str) -> None:
     """Follow the command until the car answers, without blocking the caller."""
-    create_task = getattr(hass, "async_create_task", None)
+    # A plain task would hold up startup and shutdown for the whole poll.
+    create_task = getattr(hass, "async_create_background_task", None) or getattr(
+        hass, "async_create_task", None
+    )
     if create_task is None:  # pragma: no cover - minimal test stubs
         return
 
@@ -198,6 +201,10 @@ async def _async_watch_result(
         for _ in range(attempts):
             await asyncio.sleep(POLL_INTERVAL)
             waited += POLL_INTERVAL
+
+            # Stop chasing a car whose entry has been unloaded.
+            if entry_id not in hass.data.get(DOMAIN, {}):
+                return
             try:
                 car = await opencarwings_client.CarsApi(client).api_car_read(vin)
             except Exception as err:

@@ -27,6 +27,14 @@ SCAN_INTERVAL_CHOICES = [
 SCAN_INTERVAL_OPTIONS = [c[0] for c in SCAN_INTERVAL_CHOICES]
 DEFAULT_SCAN_INTERVAL_MIN = 15
 
+
+def _scan_minutes(value) -> int:
+    """The selector hands back a string; the coordinator wants minutes as int."""
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return DEFAULT_SCAN_INTERVAL_MIN
+
 DEFAULT_API_BASE_URL = DEFAULT_API_BASE
 
 from . import CONF_COMMAND_PIN
@@ -44,7 +52,8 @@ def _scan_selector():
 
         return selector.SelectSelector(
             selector.SelectSelectorConfig(
-                options=[{"value": v, "label": l} for v, l in SCAN_INTERVAL_CHOICES]
+                # Selector option values must be strings.
+                options=[{"value": str(v), "label": l} for v, l in SCAN_INTERVAL_CHOICES]
             )
         )
     except Exception:
@@ -94,6 +103,12 @@ class OpenCARWINGSConfigFlow(config_entries.ConfigFlow, domain="ha_opencarwings"
             api_key = (user_input.get(CONF_API_KEY) or "").strip()
             api_base = user_input.get("api_base_url", DEFAULT_API_BASE_URL)
 
+            # Not on the test stubs.
+            if hasattr(self, "_async_abort_entries_match"):
+                self._async_abort_entries_match(
+                    {CONF_API_KEY: api_key, "api_base_url": api_base}
+                )
+
             try:
                 await _async_check_api_key(getattr(self, "hass", None), api_base, api_key)
             except AuthenticationError:
@@ -105,7 +120,9 @@ class OpenCARWINGSConfigFlow(config_entries.ConfigFlow, domain="ha_opencarwings"
                     title=_entry_title(api_base),
                     data={
                         CONF_API_KEY: api_key,
-                        "scan_interval": user_input.get("scan_interval", DEFAULT_SCAN_INTERVAL_MIN),
+                        "scan_interval": _scan_minutes(
+                            user_input.get("scan_interval", DEFAULT_SCAN_INTERVAL_MIN)
+                        ),
                         "api_base_url": api_base,
                         CONF_COMMAND_PIN: user_input.get(CONF_COMMAND_PIN, ""),
                     },
@@ -114,7 +131,7 @@ class OpenCARWINGSConfigFlow(config_entries.ConfigFlow, domain="ha_opencarwings"
         data_schema = vol.Schema(
             {
                 vol.Required(CONF_API_KEY): _secret_selector(),
-                vol.Required("scan_interval", default=DEFAULT_SCAN_INTERVAL_MIN): _scan_selector(),
+                vol.Required("scan_interval", default=str(DEFAULT_SCAN_INTERVAL_MIN)): _scan_selector(),
                 vol.Required("api_base_url", default=DEFAULT_API_BASE_URL): str,
                 vol.Optional(CONF_COMMAND_PIN, default=""): str,
             }
@@ -181,6 +198,9 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
             # The key lives in the entry data, not the options, so it goes there.
             api_key = (user_input.pop(CONF_API_KEY, "") or "").strip()
 
+            if "scan_interval" in user_input:
+                user_input["scan_interval"] = _scan_minutes(user_input["scan_interval"])
+
             if api_key:
                 api_base = user_input.get("api_base_url", DEFAULT_API_BASE_URL)
                 try:
@@ -208,7 +228,7 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
             errors=errors,
             data_schema=vol.Schema({
                 vol.Optional(CONF_API_KEY, default=""): _secret_selector(),
-                vol.Required("scan_interval", default=current_scan): _scan_selector(),
+                vol.Required("scan_interval", default=str(current_scan)): _scan_selector(),
                 vol.Required("api_base_url", default=current_api): str,
                 vol.Optional(CONF_COMMAND_PIN, default=current_pin): str,
             }),
