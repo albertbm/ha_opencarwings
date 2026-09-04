@@ -8,15 +8,13 @@
           "api_key": "API key",
           "scan_interval": "Update interval",
           "api_base_url": "Server address",
-          "command_pin": "Command PIN",
-          "gps_max_radius_km": "Ignore GPS fixes beyond"
+          "command_pin": "Command PIN"
         },
         "data_description": {
           "api_key": "Sign in to the OpenCARWINGS server in a browser, open your account settings and copy the API key from there.",
           "scan_interval": "How often to read fresh data from the server. This never wakes the car. Only a command button does that.",
           "api_base_url": "Base URL of your OpenCARWINGS server. The public instance is https://opencarwings.viaaq.eu",
-          "command_pin": "Your OpenCARWINGS account's PIN, set on the server. Without it the server refuses door lock and unlock, horn, lights and remote start. Leave blank if your account has no PIN.",
-          "gps_max_radius_km": "Distance from Home, in km. Fixes beyond it are ignored and the last good one stays on the map. Useful when the head unit has the wrong map region or stale map data and puts the car far from where it is. Set 0 to accept every fix."
+          "command_pin": "Your OpenCARWINGS account's PIN, set on the server. Without it the server refuses door lock and unlock, horn, lights and remote start. Leave blank if your account has no PIN."
         }
       },
       "reauth_confirm": {
@@ -47,15 +45,13 @@
           "api_key": "API key",
           "scan_interval": "Update interval",
           "api_base_url": "Server address",
-          "command_pin": "Command PIN",
-          "gps_max_radius_km": "Ignore GPS fixes beyond"
+          "command_pin": "Command PIN"
         },
         "data_description": {
           "api_key": "Only needed if your API key changed or you are switching accounts. Leave blank to keep the current one.",
           "scan_interval": "How often to read fresh data from the server. This never wakes the car. Only a command button does that.",
           "api_base_url": "Base URL of your OpenCARWINGS server. The public instance is https://opencarwings.viaaq.eu",
-          "command_pin": "Your OpenCARWINGS account's PIN, set on the server. Without it the server refuses door lock and unlock, horn, lights and remote start. Leave blank if your account has no PIN.",
-          "gps_max_radius_km": "Distance from Home, in km. Fixes beyond it are ignored and the last good one stays on the map. Useful when the head unit has the wrong map region or stale map data and puts the car far from where it is. Set 0 to accept every fix."
+          "command_pin": "Your OpenCARWINGS account's PIN, set on the server. Without it the server refuses door lock and unlock, horn, lights and remote start. Leave blank if your account has no PIN."
         }
       }
     },

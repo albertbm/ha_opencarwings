@@ -80,7 +80,31 @@ Tyre pressure warning and Service due come from the vehicle health report.
 ### Device tracker
 
 The car's position, from the server's last location fix. It sits on the same device as
-the sensors and buttons.
+the sensors and buttons, and carries latitude and longitude only.
+
+Some head units hold the wrong map region and report a position hundreds of kilometres
+from where the car is. The integration reports what the server sends; filter it in Home
+Assistant if your car does this. A trigger-based template tracker holds its last position
+when the condition fails:
+
+```yaml
+template:
+  - trigger:
+      - trigger: state
+        entity_id: device_tracker.your_car
+    condition:
+      - condition: template
+        value_template: >
+          {% set lat = state_attr('device_tracker.your_car', 'latitude') %}
+          {% set lon = state_attr('device_tracker.your_car', 'longitude') %}
+          {{ lat is not none and lon is not none
+             and distance(lat, lon) | float(9999) < 75 }}
+    device_tracker:
+      - name: Car filtered
+        unique_id: car_filtered
+        latitude: "{{ state_attr('device_tracker.your_car', 'latitude') }}"
+        longitude: "{{ state_attr('device_tracker.your_car', 'longitude') }}"
+```
 
 ## What it cannot do
 
@@ -145,17 +169,9 @@ integration's Configure button.
 | Scan interval | How often to re-read the server. Default 15 minutes |
 | API base URL | Optional. Defaults to the public instance |
 | Command PIN | Your account PIN, if you set one on the server. Without it the server refuses lock, unlock, horn, lights and remote start |
-| GPS radius | Kilometres from Home. Fixes beyond it are ignored and the last good one held. See below. Set 0 to accept every fix |
 
 The key goes out as `Authorization: Token <key>` on every request. It does not expire;
 resetting it on the server invalidates the old one.
-
-### The GPS radius
-
-Some head units hold the wrong map region or stale map data and report a position
-hundreds of kilometres from where the car actually is, while the TCU has it right.
-Setting a radius drops those fixes and keeps the last good position on the map. Off by
-default.
 
 ### Upgrading from username and password
 

@@ -28,8 +28,6 @@ DOMAIN = "ha_opencarwings"
 
 # Config entry keys shared by the config flow and the platforms.
 CONF_COMMAND_PIN = "command_pin"
-CONF_GPS_MAX_RADIUS_KM = "gps_max_radius_km"
-DEFAULT_GPS_MAX_RADIUS_KM = 0
 PLATFORMS = ["sensor", "binary_sensor", "switch", "number", "device_tracker", "button"]
 
 DEFAULT_SCAN_INTERVAL_MIN = 15

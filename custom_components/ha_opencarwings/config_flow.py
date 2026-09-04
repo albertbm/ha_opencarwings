@@ -29,7 +29,7 @@ DEFAULT_SCAN_INTERVAL_MIN = 15
 
 DEFAULT_API_BASE_URL = DEFAULT_API_BASE
 
-from . import CONF_COMMAND_PIN, CONF_GPS_MAX_RADIUS_KM, DEFAULT_GPS_MAX_RADIUS_KM
+from . import CONF_COMMAND_PIN
 
 
 def _entry_title(api_base: str) -> str:
@@ -50,20 +50,6 @@ def _scan_selector():
     except Exception:
         # The test stubs have no selector helper.
         return vol.In(SCAN_INTERVAL_OPTIONS)
-
-
-def _radius_selector():
-    try:
-        from homeassistant.helpers import selector
-
-        return selector.NumberSelector(
-            selector.NumberSelectorConfig(
-                min=0, max=2000, step=5, unit_of_measurement="km",
-                mode=selector.NumberSelectorMode.BOX,
-            )
-        )
-    except Exception:
-        return vol.Coerce(float)
 
 
 def _secret_selector():
@@ -122,9 +108,6 @@ class OpenCARWINGSConfigFlow(config_entries.ConfigFlow, domain="ha_opencarwings"
                         "scan_interval": user_input.get("scan_interval", DEFAULT_SCAN_INTERVAL_MIN),
                         "api_base_url": api_base,
                         CONF_COMMAND_PIN: user_input.get(CONF_COMMAND_PIN, ""),
-                        CONF_GPS_MAX_RADIUS_KM: user_input.get(
-                            CONF_GPS_MAX_RADIUS_KM, DEFAULT_GPS_MAX_RADIUS_KM
-                        ),
                     },
                 )
 
@@ -134,9 +117,6 @@ class OpenCARWINGSConfigFlow(config_entries.ConfigFlow, domain="ha_opencarwings"
                 vol.Required("scan_interval", default=DEFAULT_SCAN_INTERVAL_MIN): _scan_selector(),
                 vol.Required("api_base_url", default=DEFAULT_API_BASE_URL): str,
                 vol.Optional(CONF_COMMAND_PIN, default=""): str,
-                vol.Optional(
-                    CONF_GPS_MAX_RADIUS_KM, default=DEFAULT_GPS_MAX_RADIUS_KM
-                ): _radius_selector(),
             }
         )
 
@@ -222,10 +202,6 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
         current_scan = self.config_entry.options.get("scan_interval", self.config_entry.data.get("scan_interval", DEFAULT_SCAN_INTERVAL_MIN))
         current_api = self.config_entry.options.get("api_base_url", self.config_entry.data.get("api_base_url", DEFAULT_API_BASE_URL))
         current_pin = self.config_entry.options.get(CONF_COMMAND_PIN, self.config_entry.data.get(CONF_COMMAND_PIN, ""))
-        current_radius = self.config_entry.options.get(
-            CONF_GPS_MAX_RADIUS_KM,
-            self.config_entry.data.get(CONF_GPS_MAX_RADIUS_KM, DEFAULT_GPS_MAX_RADIUS_KM),
-        )
 
         return self.async_show_form(
             step_id="init",
@@ -235,8 +211,5 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
                 vol.Required("scan_interval", default=current_scan): _scan_selector(),
                 vol.Required("api_base_url", default=current_api): str,
                 vol.Optional(CONF_COMMAND_PIN, default=current_pin): str,
-                vol.Optional(
-                    CONF_GPS_MAX_RADIUS_KM, default=current_radius
-                ): _radius_selector(),
             }),
         )
