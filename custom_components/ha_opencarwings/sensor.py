@@ -13,6 +13,7 @@ from homeassistant.const import (
     UnitOfEnergy,
     UnitOfLength,
     UnitOfPressure,
+    UnitOfTemperature,
 )
 
 try:
@@ -148,6 +149,19 @@ def _chg_minutes(v: Any) -> int | None:
     return minutes
 
 
+# The server decodes the cabin byte as temp/2 - 40, leaving 0 when the car sent
+# nothing and 87.5 for the TCU's 0xFF marker. A real 0 C reads as unknown too.
+_CABIN_TEMP_NO_DATA = (0.0, 87.5)
+
+
+def _cabin_temp(v: Any) -> float | None:
+    """Cabin temperature in C, or None when the car did not report one."""
+    temp = _to_float(v)
+    if temp is None or temp in _CABIN_TEMP_NO_DATA:
+        return None
+    return temp
+
+
 def _code_list(v: Any) -> list[str]:
     """Fault codes as readable strings.
 
@@ -260,6 +274,16 @@ CAR_SENSORS: list[CarSensorSpec] = [
     CarSensorSpec("soc", _ev_getter("soc"), transform=_round_1, device_class=SensorDeviceClass.BATTERY, state_class=SensorStateClass.MEASUREMENT, unit_of_measurement=PERCENTAGE),
     CarSensorSpec("soc_display", _ev_getter("soc_display"), transform=_round_1, device_class=SensorDeviceClass.BATTERY, state_class=SensorStateClass.MEASUREMENT, unit_of_measurement=PERCENTAGE),
     CarSensorSpec("charge_bars", _ev_getter("charge_bars"), icon="mdi:battery-charging-medium"),
+    CarSensorSpec(
+        "cabin_temp",
+        _ev_getter("cabin_temp"),
+        transform=_cabin_temp,
+        device_class=SensorDeviceClass.TEMPERATURE,
+        state_class=SensorStateClass.MEASUREMENT,
+        unit_of_measurement=UnitOfTemperature.CELSIUS,
+        display_precision=0,
+        icon="mdi:car-seat-heater",
+    ),
     CarSensorSpec(
         "odometer",
         lambda car: _flat(car).get("odometer"),

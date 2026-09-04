@@ -37,4 +37,5 @@ class SensorDeviceClass:
     DISTANCE = "distance"
     ENERGY_STORAGE = "energy_storage"
     ENUM = "enum"
+    TEMPERATURE = "temperature"
     PRESSURE = "pressure"

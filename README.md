@@ -43,6 +43,7 @@ as the device's firmware version and serial number.
 | GIDs | Energy units the car counts in |
 | Capacity bars | The dashboard's capacity bars, out of 12 |
 | Gear | `park`, `drive` or `reverse` |
+| Cabin temperature | Degrees C, empty when the car reports no reading |
 | Status | One of `charging`, `running`, `ac_on`, `idle` |
 | Tyre pressure, front left / front right / rear left / rear right | kPa |
 | Fault codes | How many codes the car is storing, with the codes as attributes. Diagnostic |
@@ -91,16 +92,16 @@ knows what the car's TCU uploads.
 - The server takes a temperature with the climate on command but never reports back what
   the car settled on. Requested temperature holds your request, and the car may be doing
   something else.
-- Cabin temperature is in the API, but on the car this was developed against it always
-  reads as the no-data sentinel. No sensor is exposed for it.
 - Remote start and Horn and lights have no state at all in the API. They show as
   assumed-state toggles holding the last command sent.
 - Sending a temperature needs a Ficosa 2016 TCU. Older Continental units reject the
   payload.
 - Every entity is created for every car, matching what the server's own page shows. What
   a car does not report reads as unknown rather than disappearing.
-- Only the Ficosa TCU uploads a vehicle health report. On other cars those entities stay
-  unknown.
+- Only the Ficosa TCU uploads a vehicle health report, and only the ZE1 uploads a cabin
+  temperature. On other cars those entities stay unknown.
+- A cabin at exactly 0 C reads as unknown, because the server stores the same value for
+  that and for no reading at all.
 
 ## How it stays up to date
 

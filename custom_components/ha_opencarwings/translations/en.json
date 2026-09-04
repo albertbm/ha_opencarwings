@@ -171,6 +171,9 @@
       "counter": {
         "name": "Update counter"
       },
+      "cabin_temp": {
+        "name": "Cabin temperature"
+      },
       "tpms_fl": {
         "name": "Tyre pressure front left"
       },

@@ -99,6 +99,24 @@ async def test_a_car_with_no_health_report_still_gets_the_entities():
 
 
 @pytest.mark.asyncio
+async def test_cabin_temp_is_reported_when_the_car_sent_one():
+    warm = make_car(vin="VIN1", ev_info={"cabin_temp": 21.5})
+    cold = make_car(vin="VIN1", ev_info={"cabin_temp": -12.0})
+    assert (await _setup(sensor_mod, warm))["ha_opencarwings_cabin_temp_VIN1"].native_value == 21.5
+    assert (await _setup(sensor_mod, cold))["ha_opencarwings_cabin_temp_VIN1"].native_value == -12.0
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("value", [0, 0.0, 87.5, None])
+async def test_cabin_temp_ignores_the_no_data_values(value):
+    # The server leaves the field at 0 when the car sent nothing, and decodes
+    # the TCU's 0xFF invalid marker to 87.5.
+    car = make_car(vin="VIN1", ev_info={"cabin_temp": value})
+    by_id = await _setup(sensor_mod, car)
+    assert by_id["ha_opencarwings_cabin_temp_VIN1"].native_value is None
+
+
+@pytest.mark.asyncio
 async def test_tcu_type_is_exposed_as_a_diagnostic():
     by_id = await _setup(sensor_mod)
     assert by_id["ha_opencarwings_tcu_type_VIN1"].native_value == "ficosa2016"
