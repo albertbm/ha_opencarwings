@@ -1,4 +1,7 @@
-class SwitchEntity:
+from ..helpers.entity import Entity
+
+
+class SwitchEntity(Entity):
     """Minimal SwitchEntity stub."""
 
     @property
