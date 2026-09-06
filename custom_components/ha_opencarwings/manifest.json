@@ -11,7 +11,8 @@
   "iot_class": "cloud_push",
   "issue_tracker": "https://github.com/czapeczek/ha_opencarwings/issues",
   "requirements": [
-    "opencarwings_client @ git+https://github.com/developerfromjokela/opencarwings-python.git@75e81ec607a62e192b83347490f5d6f4c6e628fb"
+    "aiohttp-retry>=2.8.3",
+    "python-dateutil>=2.8.2"
   ],
-  "version": "0.7.1"
+  "version": "0.7.2"
 }

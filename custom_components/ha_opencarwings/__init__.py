@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import logging
+import os
+import sys
 from datetime import timedelta
 
 from homeassistant.config_entries import ConfigEntry
@@ -29,6 +31,11 @@ try:
     from homeassistant.const import CONF_API_KEY
 except ImportError:  # pragma: no cover - older stubs
     CONF_API_KEY = "api_key"
+
+# The vendored client imports its own modules by absolute name.
+_VENDOR = os.path.join(os.path.dirname(__file__), "vendor")
+if _VENDOR not in sys.path:
+    sys.path.insert(0, _VENDOR)
 
 DOMAIN = "ha_opencarwings"
 
