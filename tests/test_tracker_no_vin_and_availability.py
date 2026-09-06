@@ -42,7 +42,6 @@ async def test_tracker_available_false_when_no_location():
 
 @pytest.mark.asyncio
 async def test_coordinator_refresh_before_creation():
-    # coordinator with no data but an async_request_refresh that populates data
     class FakeCoordinator:
         def __init__(self):
             self.data = None

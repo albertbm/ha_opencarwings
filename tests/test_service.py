@@ -23,7 +23,6 @@ class ServicesStub:
 
 @pytest.mark.asyncio
 async def test_refresh_service_for_entry(monkeypatch):
-    # Create a fake coordinator that records refresh calls
     class FakeCoordinator:
         def __init__(self):
             self.called = False
@@ -56,13 +55,11 @@ async def test_refresh_service_for_entry(monkeypatch):
     monkeypatch.setattr(init_mod, "DataUpdateCoordinator", FakeCoordinatorClass)
 
     entry = type("E", (), {"entry_id": "e1", "title": "e1", "data": {"api_key": "k"}})()
-    # call setup which should register service
     await init_mod.async_setup_entry(hass, entry)
 
-    # find the coordinator instance installed by setup
+    # Setup replaced the seeded coordinator, so read it back.
     real_coord = hass.data["ha_opencarwings"]["e1"].get("coordinator")
 
-    # call the service targeting entry e1
     await hass.services.async_call("ha_opencarwings", "refresh", {"entry_id": "e1"})
 
     assert getattr(real_coord, "called", False) is True
@@ -107,6 +104,5 @@ async def test_refresh_service_refreshes_all(monkeypatch):
 
     await hass.services.async_call("ha_opencarwings", "refresh", {})
 
-    # the installed coordinators were created by setup; ensure both were called
     assert hass.data["ha_opencarwings"]["e1"]["coordinator"].called is True
     assert hass.data["ha_opencarwings"]["e2"]["coordinator"].called is True

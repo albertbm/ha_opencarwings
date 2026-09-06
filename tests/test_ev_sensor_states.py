@@ -17,7 +17,6 @@ async def test_ev_sensor_states():
     entry = type("E", (), {"entry_id": "e1"})()
     await sensor_mod.async_setup_entry(hass, entry, add)
 
-    # verify some of the new sensors return expected states
     def _val(e):
         return getattr(e, "native_value", getattr(e, "state", None))
 

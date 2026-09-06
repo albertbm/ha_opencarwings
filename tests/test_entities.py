@@ -15,16 +15,12 @@ async def test_battery_and_location_and_switch_creation(monkeypatch):
         added.extend(entities)
 
     entry = type("E", (), {"entry_id": "e1"})()
-    # set up sensors
     await sensor_mod.async_setup_entry(hass, entry, add)
 
-    # One CarListSensor, then the specs plus status, last updated, last
-    # requested and VIN for the car.
     # One list sensor, then every spec plus status, last updated, last
     # requested, VIN and fault codes.
     assert len(added) == 1 + len(sensor_mod.CAR_SENSORS) + 5
 
-    # new EV sensors
     def _val(e):
         return getattr(e, "native_value", getattr(e, "state", None))
 
@@ -47,7 +43,6 @@ async def test_battery_and_location_and_switch_creation(monkeypatch):
     status = next(x for x in added if x.unique_id == "ha_opencarwings_status_VIN1")
     assert _val(status) == "idle"
 
-    # Now test switch creation
     sw_added = []
 
     def sw_add(entities):
@@ -60,7 +55,6 @@ async def test_battery_and_location_and_switch_creation(monkeypatch):
     sw = sw_added[0]
     assert sw.unique_id == "ha_opencarwings_ac_VIN1"
 
-    # device_tracker should create a tracker for the car
     trackers = []
 
     def tr_add(entities):

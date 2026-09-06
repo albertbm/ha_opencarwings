@@ -64,7 +64,6 @@ async def test_car_refresh_button_created_and_has_unique_id():
     # Three fixed buttons, plus one per supported command.
     assert len(added) == 3 + len(button_mod.COMMAND_BUTTONS)
 
-    # find the car button
     car_btn = None
     for ent in added:
         if getattr(ent, "unique_id", "").startswith("ha_opencarwings_car_refresh_"):
@@ -87,7 +86,6 @@ async def test_car_refresh_button_is_named_by_translation():
     entry = type("E", (), {"entry_id": "e1"})()
     await button_mod.async_setup_entry(hass, entry, add)
 
-    # find car button
     car_btn = None
     for ent in added:
         if getattr(ent, "unique_id", "").startswith("ha_opencarwings_car_refresh_"):
@@ -110,7 +108,6 @@ async def test_car_refresh_button_is_attached_to_the_car_device():
     entry = type("E", (), {"entry_id": "e1"})()
     await button_mod.async_setup_entry(hass, entry, add)
 
-    # find car button
     car_btn = None
     for ent in added:
         if getattr(ent, "unique_id", "").startswith("ha_opencarwings_car_refresh_"):
@@ -137,7 +134,6 @@ async def test_car_refresh_button_calls_api(monkeypatch):
 
     await button_mod.async_setup_entry(hass, entry, add)
 
-    # find car button
     car_btn = None
     for ent in added:
         if getattr(ent, "unique_id", "").startswith("ha_opencarwings_car_refresh_"):
@@ -176,7 +172,6 @@ async def test_car_refresh_button_triggers_coordinator_refresh(monkeypatch):
 
     await button_mod.async_setup_entry(hass, entry, add)
 
-    # find car button
     car_btn = None
     for ent in added:
         if getattr(ent, "unique_id", "").startswith("ha_opencarwings_car_refresh_"):
@@ -205,7 +200,6 @@ async def test_car_chargestart_button_created_and_has_unique_id():
     entry = type("E", (), {"entry_id": "e1"})()
     await button_mod.async_setup_entry(hass, entry, add)
 
-    # find charge start button
     charge_btn = None
     for ent in added:
         if getattr(ent, "unique_id", "").startswith("ha_opencarwings_car_chargestart_"):
@@ -253,7 +247,6 @@ async def test_car_chargestart_button_calls_api(monkeypatch):
 
     await button_mod.async_setup_entry(hass, entry, add)
 
-    # find charge start button
     charge_btn = None
     for ent in added:
         if getattr(ent, "unique_id", "").startswith("ha_opencarwings_car_chargestart_"):
@@ -292,7 +285,6 @@ async def test_car_chargestart_button_triggers_coordinator_refresh(monkeypatch):
 
     await button_mod.async_setup_entry(hass, entry, add)
 
-    # find charge start button
     charge_btn = None
     for ent in added:
         if getattr(ent, "unique_id", "").startswith("ha_opencarwings_car_chargestart_"):

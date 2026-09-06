@@ -19,7 +19,6 @@ class FakeCoordinator:
 
         return _remove
 
-    # helper to simulate an update
     def notify(self):
         for l in list(self._listeners):
             l()
@@ -27,7 +26,6 @@ class FakeCoordinator:
 
 @pytest.mark.asyncio
 async def test_entities_update_on_coordinator_change():
-    # initial data
     car1 = make_car(vin="VIN1", ev_info={"soc": 70})
     coord = FakeCoordinator([car1])
 
@@ -48,13 +46,11 @@ async def test_entities_update_on_coordinator_change():
     def _val(e):
         return getattr(e, "native_value", getattr(e, "state", None))
 
-    # find SOC sensor
     soc = next(
         x for x in added if getattr(x, "unique_id", None) == "ha_opencarwings_soc_VIN1"
     )
     assert _val(soc) == 70
 
-    # update coordinator data
     car1_updated = make_car(vin="VIN1", ev_info={"soc": 80})
     coord.data = [car1_updated]
     coord.notify()
@@ -64,10 +60,7 @@ async def test_entities_update_on_coordinator_change():
 
 @pytest.mark.asyncio
 async def test_odometer_present_when_full_payload_available():
-    """
-    Ensure odometer is exposed when present in coordinator data
-    (simulates VIN-based detail enrichment).
-    """
+    """The odometer shows once the VIN detail read has supplied it."""
     car = make_car(vin="VIN123", odometer=167504, ev_info={"soc": 55})
     coord = FakeCoordinator([car])
 
@@ -97,9 +90,6 @@ async def test_odometer_present_when_full_payload_available():
 
 @pytest.mark.asyncio
 async def test_soc_display_is_rounded_to_one_decimal():
-    """
-    soc_display should be rounded to 1 decimal place.
-    """
     car = make_car(vin="VIN1", ev_info={"soc_display": 81.8043166797615})
     coord = FakeCoordinator([car])
 

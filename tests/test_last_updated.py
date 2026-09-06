@@ -9,8 +9,6 @@ from custom_components.ha_opencarwings import sensor as sensor_mod
 @pytest.mark.asyncio
 async def test_last_updated_sensor_reports_latest_timestamp_per_car():
     latest = "2026-01-04T13:00:00Z"
-    # Create a fake coordinator that has a last_update_time so we can test the Last Requested sensor
-    # Also include actual data so the sensor can find the cars
     coordinator = type("C", (), {
         "last_update_time": datetime(2026, 1, 4, 14, 0, 0, tzinfo=timezone.utc), 
         "data": [
@@ -24,7 +22,6 @@ async def test_last_updated_sensor_reports_latest_timestamp_per_car():
         make_car(vin="VIN2", ev_info={"last_updated": latest})
     ], "coordinator": coordinator}}}})()
 
-    # Capture added entities
     added = []
 
     def add(entities):
@@ -61,7 +58,6 @@ async def test_last_updated_sensor_reports_latest_timestamp_per_car():
 async def test_last_requested_sensor_unknown_without_coordinator():
     hass = type("H", (), {"data": {"ha_opencarwings": {"e1": {"cars": [make_car(vin="VIN1", ev_info={"last_updated": "2026-01-04T12:00:00Z"})]}}}})()
 
-    # Capture added entities
     added = []
 
     def add(entities):
@@ -79,7 +75,6 @@ async def test_last_requested_sensor_unknown_without_coordinator():
 
 @pytest.mark.asyncio
 async def test_last_updated_sensor_parses_timestamps_with_microseconds():
-    """Test that the sensor correctly parses timestamps with microseconds (real API format)."""
     # Real API format includes microseconds
     ts_with_microseconds = "2026-01-05T00:16:10.419903Z"
     coordinator = type("C", (), {
@@ -93,7 +88,6 @@ async def test_last_updated_sensor_parses_timestamps_with_microseconds():
         make_car(vin="VIN1", ev_info={"last_updated": ts_with_microseconds}, location={"last_updated": "2026-01-05T00:16:10.410231Z"})
     ], "coordinator": coordinator}}}})()
 
-    # Capture added entities
     added = []
 
     def add(entities):
@@ -107,6 +101,5 @@ async def test_last_updated_sensor_parses_timestamps_with_microseconds():
     assert len(last1) == 1
     def _val(e):
         return getattr(e, "native_value", getattr(e, "state", None))
-    # The sensor should successfully parse and return the timestamp
     assert last1[0].extra_state_attributes["iso"] == "2026-01-05T00:16:10.419903Z"
     assert _val(last1[0]) is not None

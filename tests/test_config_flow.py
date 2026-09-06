@@ -31,7 +31,6 @@ async def test_config_flow_scan_interval_selected(monkeypatch):
     monkeypatch.setattr(cfg, "_async_check_api_key", _check_key)
 
     flow = OpenCARWINGSConfigFlow()
-    # provide explicit scan_interval and ensure it's persisted
     result = await flow.async_step_user({"api_key": "good", "scan_interval": 1})
 
     assert result["type"] == "create_entry"
@@ -45,7 +44,6 @@ async def test_config_flow_auth_failure(monkeypatch):
     flow = OpenCARWINGSConfigFlow()
     result = await flow.async_step_user({"api_key": "bad"})
 
-    # On auth failure, the form is shown with errors
     assert result["type"] == "form"
     assert "base" in result.get("errors", {})
 

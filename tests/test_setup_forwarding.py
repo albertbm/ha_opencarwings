@@ -18,7 +18,6 @@ async def test_forward_entry_setups_and_unload(monkeypatch):
         calls['unload'] = (entry, platforms)
         return True
 
-    # hass stub with config_entries having the methods
     config_entries = type("C", (), {
         "async_forward_entry_setups": async_forward_entry_setups,
         "async_unload_platforms": async_unload_platforms,
@@ -37,7 +36,6 @@ async def test_forward_entry_setups_and_unload(monkeypatch):
     assert 'forward' in calls
     assert calls['forward'][1] == module.PLATFORMS
 
-    # Now unload
     res = await module.async_unload_entry(hass, entry)
     assert res is True
     assert 'unload' in calls

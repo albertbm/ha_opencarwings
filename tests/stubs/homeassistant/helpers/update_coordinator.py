@@ -14,7 +14,6 @@ class DataUpdateCoordinator:
         self._listeners = []
 
     async def async_config_entry_first_refresh(self):
-        # perform initial fetch
         self.data = await self.update_method()
 
     def async_add_listener(self, listener):
